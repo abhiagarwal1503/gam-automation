@@ -1,0 +1,28 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    ports:
+      - "5001:5001"
+    environment:
+      - PORT=5001
+      - APP_ENV=production
+      - GOOGLE_AD_MANAGER_NETWORK_CODE=12345678
+      - GAM_API_VERSION=v202511
+    volumes:
+      - gam_data:/app/data
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+
+volumes:
+  gam_data:

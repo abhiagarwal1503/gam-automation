@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: blink-cms-gam-automation
+    env: node
+    plan: free
+    buildCommand: "cd backend && npm install && npm run build && cd ../frontend && npm install && npm run build"
+    startCommand: "cd backend && node dist/server.js"
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 4000
+      - key: GAM_NETWORK_CODE
+        value: "22068249324"

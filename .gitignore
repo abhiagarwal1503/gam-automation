@@ -1,0 +1,17 @@
+.env
+.env.*
+venv/
+.venv/
+__pycache__/
+*.pyc
+.DS_Store
+.idea/
+.vscode/
+
+node_modules/
+backend/src/config/service-account.json
+backend/dist/
+frontend/dist/
+*.db
+*.db-shm
+*.db-wal

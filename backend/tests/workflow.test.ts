@@ -1,0 +1,98 @@
+import { CampaignWorkflowService } from '../src/services/campaignWorkflowService';
+import { campaignRepo, orderRepo, lineItemRepo, creativeRepo, gptTagRepo } from '../src/repositories';
+import { initDatabase } from '../src/database/db';
+
+describe('Campaign Workflow Saga & Idempotency', () => {
+  beforeAll(() => {
+    initDatabase();
+  });
+
+  test('executes end-to-end campaign creation in dry-run mode', async () => {
+    const campaignId = `CMP-TEST-${Date.now()}`;
+    const now = new Date().toISOString();
+
+    const campaign = campaignRepo.create({
+      id: campaignId,
+      advertiserName: 'Test Corporation',
+      bannerUrl: 'https://example.com/banner.jpg',
+      targetUrl: 'https://example.com/promo',
+      startDate: '2026-09-01',
+      endDate: '2026-09-30',
+      sizes: [{ width: 300, height: 250 }],
+      position: 'homepage',
+      status: 'DRAFT',
+      currentStep: 'INITIALIZED',
+      isDryRun: true,
+      createdAt: now,
+      updatedAt: now
+    });
+
+    // Execute workflow synchronously
+    const result = await CampaignWorkflowService.executeWorkflow(campaign.id);
+    if (!result.success) {
+      console.error('Workflow failed with error:', result.error, result.googleError);
+    }
+    expect(result.success).toBe(true);
+    expect(result.step).toBe('COMPLETED');
+
+    const updated = campaignRepo.findById(campaign.id);
+    expect(updated?.status).toBe('READY');
+
+    // Verify entities created
+    const order = orderRepo.findByCampaignId(campaign.id);
+    expect(order).toBeDefined();
+    expect(order?.name).toContain('test_corporation');
+    expect(order?.googleOrderId).toBeDefined();
+
+    const lineItems = lineItemRepo.findByCampaignId(campaign.id);
+    expect(lineItems.length).toBe(1);
+    expect(lineItems[0].googleLineItemId).toBeDefined();
+
+    const creatives = creativeRepo.findByCampaignId(campaign.id);
+    expect(creatives.length).toBe(1);
+    expect(creatives[0].googleCreativeId).toBeDefined();
+
+    const gptTags = gptTagRepo.findByCampaignId(campaign.id);
+    expect(gptTags.length).toBe(1);
+    expect(gptTags[0].headCode).toContain('googletag.defineSlot');
+  });
+
+  test('idempotency: running workflow multiple times reuses existing entities', async () => {
+    const campaignId = `CMP-IDEM-${Date.now()}`;
+    const now = new Date().toISOString();
+
+    const campaign = campaignRepo.create({
+      id: campaignId,
+      advertiserName: 'Idempotent Brand',
+      bannerUrl: 'https://example.com/banner.jpg',
+      targetUrl: 'https://example.com/offer',
+      startDate: '2026-09-01',
+      endDate: '2026-09-15',
+      sizes: [{ width: 300, height: 250 }],
+      position: 'homepage',
+      status: 'DRAFT',
+      currentStep: 'INITIALIZED',
+      isDryRun: true,
+      createdAt: now,
+      updatedAt: now
+    });
+
+    const result1 = await CampaignWorkflowService.executeWorkflow(campaign.id);
+    expect(result1.success).toBe(true);
+
+    const initialOrder = orderRepo.findByCampaignId(campaign.id);
+    const initialLineItems = lineItemRepo.findByCampaignId(campaign.id);
+
+    // Run again
+    const result2 = await CampaignWorkflowService.executeWorkflow(campaign.id);
+    expect(result2.success).toBe(true);
+
+    const secondOrder = orderRepo.findByCampaignId(campaign.id);
+    const secondLineItems = lineItemRepo.findByCampaignId(campaign.id);
+
+    // Google IDs should remain identical, no duplicates
+    expect(secondOrder?.googleOrderId).toBe(initialOrder?.googleOrderId);
+    expect(secondLineItems.length).toBe(initialLineItems.length);
+    expect(secondLineItems[0].googleLineItemId).toBe(initialLineItems[0].googleLineItemId);
+  });
+});
