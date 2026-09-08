@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { db } from '../database/db';
+import { User } from '../types';
 import {
   campaignRepo,
   advertiserRepo,
@@ -11,9 +12,11 @@ import {
   gptTagRepo,
   logRepo,
   settingsRepo,
-  userRepo
+  userRepo,
+  cmsPartnerRepo
 } from '../repositories';
 import { CampaignWorkflowService } from '../services/campaignWorkflowService';
+import { CmsSyncService } from '../services/cmsSyncService';
 import { generateGPTTags } from '../utils/gptGenerator';
 import {
   GoogleAdManagerAuthService,
@@ -57,6 +60,14 @@ export const NETWORK_ADVERTISERS: Record<string, { id: string; name: string; typ
     { id: '5247096423', name: 'srgd', type: 'ADVERTISER' },
     { id: '6155963446', name: 'TechStar Brand', type: 'ADVERTISER' },
     { id: '6155883565', name: 'testingforatuo', type: 'ADVERTISER' }
+  ],
+  // The Federal
+  '22665183713': [
+    { id: '6156180871', name: 'The Federal Sponsor', type: 'ADVERTISER' },
+    { id: '6156180872', name: 'Federal National Brands', type: 'ADVERTISER' },
+    { id: '6156180873', name: 'Federal Retail Agency', type: 'AGENCY' },
+    { id: '5225386500', name: 'Hocalwire Media', type: 'ADVERTISER' },
+    { id: '5234810863', name: 'Google Marketing', type: 'ADVERTISER' }
   ],
   // new powergame dot com
   '22827981500': [
@@ -112,13 +123,46 @@ const getParam = (param: any): string => {
   return String(param || '');
 };
 
+// Helper: Extract authenticated user from Authorization header
+export const getAuthUser = (req: Request): User | null => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) return null;
+    const token = authHeader.replace('Bearer ', '').trim();
+    const decoded = JSON.parse(Buffer.from(token, 'base64').toString('utf-8'));
+    if (!decoded || !decoded.id || (decoded.exp && decoded.exp < Date.now())) return null;
+    return userRepo.findById(decoded.id);
+  } catch {
+    return null;
+  }
+};
+
 // -------------------------------------------------------------
 // Campaign Controller
 // -------------------------------------------------------------
 export const campaignController = {
   async list(req: Request, res: Response) {
     try {
-      const campaigns = campaignRepo.list();
+      const authUser = getAuthUser(req);
+      let filterNetwork: string | undefined = undefined;
+      let filterAdvertiser: string | undefined = undefined;
+
+      // Scoped partner user: strictly filter by assigned partner network
+      if (authUser && authUser.role !== 'admin' && authUser.networkCode && authUser.networkCode !== 'ALL') {
+        filterNetwork = authUser.networkCode;
+      } else if (req.query.networkCode && req.query.networkCode !== 'ALL') {
+        // Admin user: filter by active switcher or return all
+        filterNetwork = String(req.query.networkCode);
+      }
+
+      // Advertiser scoping: if user is assigned to a specific advertiser, strictly scope to that advertiser
+      if (authUser && authUser.role !== 'admin' && authUser.advertiserName && authUser.advertiserName !== 'All Advertisers' && authUser.advertiserId !== 'ALL') {
+        filterAdvertiser = authUser.advertiserName;
+      } else if (req.query.advertiser && req.query.advertiser !== 'ALL') {
+        filterAdvertiser = String(req.query.advertiser);
+      }
+
+      const campaigns = campaignRepo.list(filterNetwork, filterAdvertiser);
       return res.json({ success: true, data: campaigns });
     } catch (err: any) {
       return res.status(500).json({ success: false, error: err.message });
@@ -166,18 +210,31 @@ export const campaignController = {
         });
       }
 
+      const authUser = getAuthUser(req);
+
+      // Determine effective networkCode: non-admin partner accounts are strictly locked to their partner network
+      let effectiveNetworkCode = networkCode;
+      if (authUser && authUser.role !== 'admin' && authUser.networkCode && authUser.networkCode !== 'ALL') {
+        effectiveNetworkCode = authUser.networkCode;
+      }
+
+      const createdBy = authUser ? `${authUser.name} (${authUser.email})` : (req.body.createdBy || 'Direct Automated Booking');
+      const creatorEmail = authUser ? authUser.email : (req.body.creatorEmail || undefined);
+
       const campaign = await CampaignWorkflowService.createAndRunCampaign({
         advertiserName,
         customName: customName || undefined,
         advertiserId: advertiserId || undefined,
-        networkCode: networkCode || undefined,
+        networkCode: effectiveNetworkCode || undefined,
         bannerUrl,
         targetUrl,
         startDate,
         endDate,
         sizes: sizes || [{ width: 300, height: 250 }],
         position: position || 'homepage',
-        isDryRun: Boolean(isDryRun)
+        isDryRun: Boolean(isDryRun),
+        createdBy,
+        creatorEmail
       });
 
       return res.status(201).json({
@@ -349,7 +406,13 @@ export const campaignController = {
 export const adUnitController = {
   async list(req: Request, res: Response) {
     try {
-      const adUnits = adUnitRepo.list();
+      const authUser = getAuthUser(req);
+      let networkCode = req.query.networkCode ? String(req.query.networkCode) : undefined;
+      // Partner scoping: if non-admin partner user, strictly scope to their assigned network
+      if (authUser && authUser.role !== 'admin' && authUser.networkCode && authUser.networkCode !== 'ALL') {
+        networkCode = authUser.networkCode;
+      }
+      const adUnits = adUnitRepo.list(networkCode);
       return res.json({ success: true, data: adUnits });
     } catch (err: any) {
       return res.status(500).json({ success: false, error: err.message });
@@ -358,7 +421,8 @@ export const adUnitController = {
 
   async create(req: Request, res: Response) {
     try {
-      const { name, code, sizes, parentGoogleAdUnitId, googleAdUnitId } = req.body;
+      const authUser = getAuthUser(req);
+      const { name, code, sizes, parentGoogleAdUnitId, googleAdUnitId, networkCode } = req.body;
       if (!name || !code) {
         return res.status(400).json({ success: false, error: 'Name and Code are required.' });
       }
@@ -368,6 +432,11 @@ export const adUnitController = {
         return res.status(409).json({ success: false, error: `Ad Unit with code '${code}' already exists.` });
       }
 
+      // Automatically assign partner's networkCode if created by partner user
+      const assignedNetwork = (authUser && authUser.role !== 'admin' && authUser.networkCode && authUser.networkCode !== 'ALL')
+        ? authUser.networkCode
+        : (networkCode || (authUser?.networkCode !== 'ALL' ? authUser?.networkCode : null) || null);
+
       const adUnit = adUnitRepo.create({
         id: `ADU-${Date.now().toString().slice(-6)}`,
         name,
@@ -375,9 +444,15 @@ export const adUnitController = {
         sizes: sizes || [{ width: 300, height: 250 }],
         parentGoogleAdUnitId,
         googleAdUnitId,
+        networkCode: assignedNetwork,
         status: 'ACTIVE',
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
+      });
+
+      // Automatically push ad unit to active CMS partners
+      CmsSyncService.syncAdUnits([adUnit.id]).catch(err => {
+        console.warn('CMS ad unit auto-sync error:', err);
       });
 
       return res.status(201).json({ success: true, data: adUnit });
@@ -408,7 +483,17 @@ export const adUnitController = {
 export const advertiserController = {
   async list(req: Request, res: Response) {
     try {
-      const advertisers = advertiserRepo.list();
+      const authUser = getAuthUser(req);
+      let networkCode = req.query.networkCode ? String(req.query.networkCode) : undefined;
+      // Partner scoping: if non-admin partner user, strictly scope to their assigned network
+      if (authUser && authUser.role !== 'admin' && authUser.networkCode && authUser.networkCode !== 'ALL') {
+        networkCode = authUser.networkCode;
+      }
+      let advertisers = advertiserRepo.list(networkCode);
+      // Advertiser scoping: if user is assigned to a specific advertiser, strictly filter to that advertiser
+      if (authUser && authUser.role !== 'admin' && authUser.advertiserName && authUser.advertiserName !== 'All Advertisers' && authUser.advertiserId !== 'ALL') {
+        advertisers = advertisers.filter(a => a.name.toLowerCase() === authUser.advertiserName!.toLowerCase() || a.id === authUser.advertiserId);
+      }
       return res.json({ success: true, data: advertisers });
     } catch (err: any) {
       return res.status(500).json({ success: false, error: err.message });
@@ -417,12 +502,18 @@ export const advertiserController = {
 
   async create(req: Request, res: Response) {
     try {
-      const { name, googleAdvertiserId } = req.body;
+      const authUser = getAuthUser(req);
+      const { name, googleAdvertiserId, networkCode } = req.body;
       if (!name) {
         return res.status(400).json({ success: false, error: 'Advertiser name is required.' });
       }
 
-      const existing = advertiserRepo.findByName(name);
+      // Automatically assign partner's networkCode if created by partner user
+      const assignedNetwork = (authUser && authUser.role !== 'admin' && authUser.networkCode && authUser.networkCode !== 'ALL')
+        ? authUser.networkCode
+        : (networkCode || (authUser?.networkCode !== 'ALL' ? authUser?.networkCode : undefined) || undefined);
+
+      const existing = advertiserRepo.findByName(name, assignedNetwork);
       if (existing) {
         return res.status(409).json({ success: false, error: `Advertiser '${name}' already exists.` });
       }
@@ -431,6 +522,7 @@ export const advertiserController = {
         id: `ADV-${Date.now().toString().slice(-6)}`,
         name,
         googleAdvertiserId,
+        networkCode: assignedNetwork,
         status: 'ACTIVE',
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
@@ -464,6 +556,14 @@ export const advertiserController = {
 export const gptController = {
   async generate(req: Request, res: Response) {
     try {
+      const authUser = getAuthUser(req);
+      if (authUser && authUser.role !== 'admin') {
+        return res.status(403).json({
+          success: false,
+          error: 'Access Denied: Google Publisher Tag (GPT) generator is restricted to Administrators only.'
+        });
+      }
+
       const { networkCode, adUnitCode, size, divId } = req.body;
       if (!adUnitCode || !size || !size.width || !size.height) {
         return res.status(400).json({ success: false, error: 'adUnitCode and size { width, height } are required.' });
@@ -496,6 +596,14 @@ export const gptController = {
 export const logController = {
   async list(req: Request, res: Response) {
     try {
+      const authUser = getAuthUser(req);
+      if (authUser && authUser.role !== 'admin') {
+        return res.status(403).json({
+          success: false,
+          error: 'Access Denied: GAM API logs are restricted to Administrators only.'
+        });
+      }
+
       const limit = parseInt(req.query.limit as string || '100', 10);
       const logs = logRepo.list(limit);
       return res.json({ success: true, data: logs });
@@ -506,6 +614,14 @@ export const logController = {
 
   async getByCampaign(req: Request, res: Response) {
     try {
+      const authUser = getAuthUser(req);
+      if (authUser && authUser.role !== 'admin') {
+        return res.status(403).json({
+          success: false,
+          error: 'Access Denied: GAM API logs are restricted to Administrators only.'
+        });
+      }
+
       const campaignId = getParam(req.params.campaignId);
       const logs = logRepo.findByCampaignId(campaignId);
       return res.json({ success: true, data: logs });
@@ -516,6 +632,14 @@ export const logController = {
 
   async clearAll(req: Request, res: Response) {
     try {
+      const authUser = getAuthUser(req);
+      if (authUser && authUser.role !== 'admin') {
+        return res.status(403).json({
+          success: false,
+          error: 'Access Denied: Only administrators can clear GAM API logs.'
+        });
+      }
+
       const deletedCount = logRepo.clearAll();
       return res.json({
         success: true,
@@ -634,7 +758,16 @@ export const settingsController = {
 export const authController = {
   async register(req: Request, res: Response) {
     try {
-      const { name, email, password, role } = req.body;
+      // Security: Only Admin accounts can register new users
+      const caller = getAuthUser(req);
+      if (!caller || caller.role !== 'admin') {
+        return res.status(403).json({
+          success: false,
+          error: 'Access Denied: Only administrators can register new user accounts.'
+        });
+      }
+
+      const { name, email, password, role, networkCode, partnerName, advertiserId, advertiserName } = req.body;
       if (!name || !name.trim()) {
         return res.status(400).json({ success: false, error: 'Full name is required.' });
       }
@@ -647,14 +780,24 @@ export const authController = {
 
       const existing = userRepo.findByEmail(email);
       if (existing) {
-        return res.status(409).json({ success: false, error: 'An account with this email already exists. Please log in instead.' });
+        return res.status(409).json({ success: false, error: 'An account with this email already exists.' });
       }
+
+      const userRole = role || 'trafficker';
+      const assignedNetwork = userRole === 'admin' ? 'ALL' : (networkCode || 'ALL');
+      const assignedPartner = userRole === 'admin' ? 'All Networks (Global Admin)' : (partnerName || 'All Networks (Global Admin)');
+      const assignedAdvId = userRole === 'admin' ? 'ALL' : (advertiserId || 'ALL');
+      const assignedAdvName = userRole === 'admin' ? 'All Advertisers' : (advertiserName || 'All Advertisers');
 
       const user = userRepo.create({
         name,
         email,
         password,
-        role: role || 'trafficker'
+        role: userRole,
+        networkCode: assignedNetwork,
+        partnerName: assignedPartner,
+        advertiserId: assignedAdvId,
+        advertiserName: assignedAdvName
       });
 
       // Generate a lightweight session token
@@ -662,7 +805,7 @@ export const authController = {
 
       return res.status(201).json({
         success: true,
-        message: 'Account registered successfully!',
+        message: `User account created and mapped to ${assignedPartner} (${assignedAdvName})!`,
         data: {
           user,
           token
@@ -696,6 +839,10 @@ export const authController = {
         email: userRecord.email,
         role: userRecord.role,
         avatar: userRecord.avatar,
+        networkCode: userRecord.networkCode,
+        partnerName: userRecord.partnerName,
+        advertiserId: userRecord.advertiserId || undefined,
+        advertiserName: userRecord.advertiserName || undefined,
         createdAt: userRecord.createdAt,
         updatedAt: userRecord.updatedAt
       };
@@ -750,8 +897,29 @@ export const authController = {
 
   async listUsers(req: Request, res: Response) {
     try {
+      const caller = getAuthUser(req);
+      if (!caller || caller.role !== 'admin') {
+        return res.status(403).json({ success: false, error: 'Only administrators can view user list.' });
+      }
       const users = userRepo.list();
       return res.json({ success: true, data: users });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err.message });
+    }
+  },
+
+  async deleteUser(req: Request, res: Response) {
+    try {
+      const caller = getAuthUser(req);
+      if (!caller || caller.role !== 'admin') {
+        return res.status(403).json({ success: false, error: 'Only administrators can delete user accounts.' });
+      }
+      const id = getParam(req.params.id);
+      if (id === caller.id) {
+        return res.status(400).json({ success: false, error: 'You cannot delete your own account.' });
+      }
+      userRepo.delete(id);
+      return res.json({ success: true, message: 'User deleted successfully.' });
     } catch (err: any) {
       return res.status(500).json({ success: false, error: err.message });
     }
@@ -787,14 +955,26 @@ export const authController = {
 // Live GAM Data Controller
 // -------------------------------------------------------------
 export const gamLiveController = {
-  /** Return the hardcoded list of managed GAM networks */
+  /** Return the list of GAM networks (scoped to partner if non-admin) */
   async getNetworks(req: Request, res: Response) {
+    const authUser = getAuthUser(req);
+    // If non-admin partner account, only show their assigned partner network
+    if (authUser && authUser.role !== 'admin' && authUser.networkCode && authUser.networkCode !== 'ALL') {
+      const match = GAM_NETWORKS.find(n => n.code === authUser.networkCode);
+      const data = match ? [match] : [{ name: authUser.partnerName || 'Assigned Network', code: authUser.networkCode }];
+      return res.json({ success: true, data });
+    }
+    // Admin or public: return all managed GAM networks
     return res.json({ success: true, data: GAM_NETWORKS });
   },
 
   /** Fetch real advertisers (ADVERTISER type companies) from a GAM network */
   async getGamAdvertisers(req: Request, res: Response) {
-    const networkCode = String(req.query.networkCode || '').trim();
+    const authUser = getAuthUser(req);
+    let networkCode = String(req.query.networkCode || '').trim();
+    if (authUser && authUser.role !== 'admin' && authUser.networkCode && authUser.networkCode !== 'ALL') {
+      networkCode = authUser.networkCode;
+    }
     if (!networkCode) {
       return res.status(400).json({ success: false, error: 'networkCode query param is required.' });
     }
@@ -871,6 +1051,11 @@ export const gamLiveController = {
         advertisers = NETWORK_ADVERTISERS[networkCode].map(a => ({ id: a.id, name: a.name }));
       }
 
+      if (authUser && authUser.role !== 'admin' && authUser.advertiserName && authUser.advertiserName !== 'All Advertisers' && authUser.advertiserId !== 'ALL') {
+        const scoped = advertisers.filter(a => a.name.toLowerCase() === authUser.advertiserName!.toLowerCase() || a.id === authUser.advertiserId);
+        advertisers = scoped.length > 0 ? scoped : [{ id: authUser.advertiserId || 'scoped', name: authUser.advertiserName }];
+      }
+
       return res.json({
         success: true,
         networkCode,
@@ -880,7 +1065,11 @@ export const gamLiveController = {
     } catch (err: any) {
       // Check pre-configured network advertisers on network failure
       if (NETWORK_ADVERTISERS[networkCode]) {
-        const list = NETWORK_ADVERTISERS[networkCode].map(a => ({ id: a.id, name: a.name }));
+        let list = NETWORK_ADVERTISERS[networkCode].map(a => ({ id: a.id, name: a.name }));
+        if (authUser && authUser.role !== 'admin' && authUser.advertiserName && authUser.advertiserName !== 'All Advertisers' && authUser.advertiserId !== 'ALL') {
+          const scoped = list.filter(a => a.name.toLowerCase() === authUser.advertiserName!.toLowerCase() || a.id === authUser.advertiserId);
+          list = scoped.length > 0 ? scoped : [{ id: authUser.advertiserId || 'scoped', name: authUser.advertiserName }];
+        }
         return res.json({
           success: true,
           networkCode,
@@ -908,7 +1097,11 @@ export const gamLiveController = {
 
   /** Fetch live companies from GAM network and synchronize/save them into local database */
   async syncGamAdvertisers(req: Request, res: Response) {
-    const networkCode = String(req.body.networkCode || req.query.networkCode || '22068249324').trim();
+    const authUser = getAuthUser(req);
+    let networkCode = String(req.body.networkCode || req.query.networkCode || '22068249324').trim();
+    if (authUser && authUser.role !== 'admin' && authUser.networkCode && authUser.networkCode !== 'ALL') {
+      networkCode = authUser.networkCode;
+    }
     try {
       let candidateCompanies: { id: string; name: string }[] = [];
 
@@ -949,18 +1142,22 @@ export const gamLiveController = {
 
       let synced: any[] = [];
       for (const comp of candidateCompanies) {
-        const existing = advertiserRepo.findByName(comp.name);
+        const existing = advertiserRepo.findByName(comp.name, networkCode);
         if (existing) {
           if (!existing.googleAdvertiserId) {
             advertiserRepo.updateGoogleId(existing.id, comp.id);
           }
-          synced.push({ ...existing, googleAdvertiserId: comp.id });
+          if (!existing.networkCode && networkCode) {
+            advertiserRepo.updateNetworkCode(existing.id, networkCode);
+          }
+          synced.push({ ...existing, googleAdvertiserId: comp.id, networkCode: existing.networkCode || networkCode });
         } else {
           const created = advertiserRepo.create({
             id: `ADV-${comp.id}`,
             name: comp.name,
             googleAdvertiserId: comp.id,
             status: 'ACTIVE',
+            networkCode: networkCode,
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString()
           });
@@ -980,5 +1177,160 @@ export const gamLiveController = {
     }
   }
 };
+
+// -------------------------------------------------------------
+// CMS & Webhook Sync Controller
+// -------------------------------------------------------------
+export const cmsController = {
+  async listPartners(req: Request, res: Response) {
+    try {
+      const partners = cmsPartnerRepo.list();
+      return res.json({ success: true, data: partners });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err.message });
+    }
+  },
+
+  async createPartner(req: Request, res: Response) {
+    try {
+      const { name, cmsType, endpoint, apiPath, securityToken, autoSyncCampaigns, autoSyncAdUnits, isActive } = req.body;
+      if (!name || !endpoint || !apiPath || !securityToken) {
+        return res.status(400).json({
+          success: false,
+          error: 'Partner Name, Endpoint, API Path, and Security Token (s-d) are required.'
+        });
+      }
+
+      const partner = cmsPartnerRepo.create({
+        name,
+        cmsType: cmsType || 'HOCALWIRE',
+        endpoint,
+        apiPath,
+        securityToken,
+        autoSyncCampaigns: autoSyncCampaigns !== false,
+        autoSyncAdUnits: autoSyncAdUnits !== false,
+        isActive: isActive !== false
+      });
+
+      return res.status(201).json({ success: true, data: partner });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err.message });
+    }
+  },
+
+  async updatePartner(req: Request, res: Response) {
+    try {
+      const id = getParam(req.params.id);
+      const updated = cmsPartnerRepo.update(id, req.body);
+      if (!updated) {
+        return res.status(404).json({ success: false, error: `Partner ${id} not found.` });
+      }
+      return res.json({ success: true, data: updated });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err.message });
+    }
+  },
+
+  async deletePartner(req: Request, res: Response) {
+    try {
+      const id = getParam(req.params.id);
+      const ok = cmsPartnerRepo.delete(id);
+      if (!ok) {
+        return res.status(404).json({ success: false, error: `Partner ${id} not found.` });
+      }
+      return res.json({ success: true, message: `Partner ${id} deleted.` });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err.message });
+    }
+  },
+
+  async testPartner(req: Request, res: Response) {
+    try {
+      const { endpoint, apiPath, securityToken, partnerId, name } = req.body;
+      let targetData: { endpoint: string; apiPath: string; securityToken: string; name?: string };
+
+      if (partnerId) {
+        const p = cmsPartnerRepo.findById(partnerId);
+        if (!p) {
+          return res.status(404).json({ success: false, error: 'Partner not found.' });
+        }
+        targetData = {
+          endpoint: p.endpoint,
+          apiPath: p.apiPath,
+          securityToken: p.securityToken,
+          name: p.name
+        };
+      } else {
+        if (!endpoint || !apiPath || !securityToken) {
+          return res.status(400).json({
+            success: false,
+            error: 'Endpoint, API Path, and Security Token (s-d) are required for testing.'
+          });
+        }
+        targetData = { endpoint, apiPath, securityToken, name };
+      }
+
+      const testResult = await CmsSyncService.testPartnerConnection(targetData);
+      return res.json({ success: true, data: testResult });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err.message });
+    }
+  },
+
+  async syncCampaign(req: Request, res: Response) {
+    try {
+      const campaignId = getParam(req.params.id);
+      const partnerId = req.body.partnerId ? String(req.body.partnerId) : undefined;
+      const results = await CmsSyncService.syncCampaign(campaignId, partnerId);
+      return res.json({ success: true, data: results });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err.message });
+    }
+  },
+
+  async syncAdUnits(req: Request, res: Response) {
+    try {
+      const { adUnitIds, partnerId } = req.body;
+      const results = await CmsSyncService.syncAdUnits(adUnitIds, partnerId);
+      return res.json({ success: true, data: results });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err.message });
+    }
+  },
+
+  async fetchElements(req: Request, res: Response) {
+    try {
+      const partnerIdOrUrl = req.body.partnerId || req.query.partnerId || req.body.url || req.query.url;
+      const data = await CmsSyncService.fetchPartnerElements(partnerIdOrUrl ? String(partnerIdOrUrl) : undefined);
+      return res.json({ success: true, data });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err.message });
+    }
+  },
+
+  async pushElementDfp(req: Request, res: Response) {
+    try {
+      const { partnerId, element, networkCode, customSnippet } = req.body;
+      if (!element || !element.slotCode || !element.divId) {
+        return res.status(400).json({
+          success: false,
+          error: 'Element details including slotCode and divId are required.'
+        });
+      }
+
+      const result = await CmsSyncService.pushElementDfp({
+        partnerId,
+        element,
+        networkCode,
+        customSnippet
+      });
+
+      return res.json({ success: true, data: result });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err.message });
+    }
+  }
+};
+
 
 

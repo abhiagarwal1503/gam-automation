@@ -1,13 +1,18 @@
 import React, { useEffect, useState } from 'react';
-import { Grid, PlusCircle, Search, RefreshCw, Layers, Check, Copy, AlertCircle, Loader2, X, Trash2 } from 'lucide-react';
+import { Grid, PlusCircle, Search, RefreshCw, Layers, Check, Copy, AlertCircle, Loader2, X, Trash2, Globe, Building2, Shield } from 'lucide-react';
 import { api } from '../services/api';
+import { useToast } from '../context/ToastContext';
+import { useAuth } from '../context/AuthContext';
 import { AdUnit, AdSize } from '../types';
 
 export const AdUnitsPage: React.FC = () => {
+  const { user, isAdmin, isPartnerScoped, activeNetworkCode } = useAuth();
+  const { success: toastSuccess, error: toastError } = useToast();
   const [adUnits, setAdUnits] = useState<AdUnit[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [search, setSearch] = useState<string>('');
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
+  const [syncingCms, setSyncingCms] = useState<boolean>(false);
 
   // Form state
   const [name, setName] = useState<string>('');
@@ -21,7 +26,8 @@ export const AdUnitsPage: React.FC = () => {
   const fetchAdUnits = async () => {
     setLoading(true);
     try {
-      const data = await api.getAdUnits();
+      const scopeCode = isPartnerScoped ? user?.networkCode : (activeNetworkCode !== 'ALL' ? activeNetworkCode : undefined);
+      const data = await api.getAdUnits(scopeCode);
       setAdUnits(data);
     } catch (err) {
       console.error('Failed to load ad units:', err);
@@ -32,7 +38,7 @@ export const AdUnitsPage: React.FC = () => {
 
   useEffect(() => {
     fetchAdUnits();
-  }, []);
+  }, [isPartnerScoped, user?.networkCode, activeNetworkCode]);
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -47,7 +53,8 @@ export const AdUnitsPage: React.FC = () => {
       await api.createAdUnit({
         name,
         code,
-        sizes: [{ width, height, label: `${width}x${height}` }]
+        sizes: [{ width, height, label: `${width}x${height}` }],
+        networkCode: isPartnerScoped ? user?.networkCode : (activeNetworkCode !== 'ALL' ? activeNetworkCode : undefined)
       });
       setIsModalOpen(false);
       setName('');
@@ -66,7 +73,30 @@ export const AdUnitsPage: React.FC = () => {
     setTimeout(() => setCopiedId(null), 2000);
   };
 
-  const filtered = adUnits.filter(u =>
+  const handleSyncToCms = async () => {
+    setSyncingCms(true);
+    try {
+      const res = await api.syncAdUnitsToCms();
+      const first = res.data?.[0];
+      if (first?.success) {
+        toastSuccess('Ad Units Synced', first.message || 'Inventory slots successfully pushed to partner CMS.');
+      } else {
+        toastError('Sync Response', first?.error || first?.message || 'Sync encountered an issue.');
+      }
+    } catch (err: any) {
+      toastError('Sync Failed', err.response?.data?.error || err.message);
+    } finally {
+      setSyncingCms(false);
+    }
+  };
+
+  const scopedAdUnits = isPartnerScoped
+    ? adUnits.filter(u => !u.networkCode || u.networkCode === user?.networkCode)
+    : (activeNetworkCode && activeNetworkCode !== 'ALL'
+        ? adUnits.filter(u => !u.networkCode || u.networkCode === activeNetworkCode)
+        : adUnits);
+
+  const filtered = scopedAdUnits.filter(u =>
     u.name.toLowerCase().includes(search.toLowerCase()) ||
     u.code.toLowerCase().includes(search.toLowerCase())
   );
@@ -93,6 +123,15 @@ export const AdUnitsPage: React.FC = () => {
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
           </button>
           <button
+            onClick={handleSyncToCms}
+            disabled={syncingCms || adUnits.length === 0}
+            className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 text-xs font-semibold shadow-xs transition disabled:opacity-50"
+            title="Push all ad units and DFP snippets to active CMS partner (e.g. Hocalwire)"
+          >
+            <Globe className={`w-3.5 h-3.5 ${syncingCms ? 'animate-spin' : ''}`} />
+            {syncingCms ? 'Syncing...' : 'Sync Ad Units to CMS'}
+          </button>
+          <button
             onClick={() => setIsModalOpen(true)}
             className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-semibold shadow-sm transition"
           >
@@ -101,6 +140,23 @@ export const AdUnitsPage: React.FC = () => {
           </button>
         </div>
       </div>
+
+      {/* Partner Scoping / Network Filter Indicator */}
+      {isPartnerScoped ? (
+        <div className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-blue-50/90 border border-blue-200 text-blue-900 text-xs font-bold w-fit shadow-2xs">
+          <Building2 className="w-4 h-4 text-blue-600 shrink-0" />
+          <span>Partner Ad Inventory: {user?.partnerName}</span>
+          <span className="font-mono text-[11px] text-blue-700">({user?.networkCode})</span>
+          <span className="px-2 py-0.5 rounded-md bg-blue-200/70 text-blue-800 text-[10px] font-bold uppercase ml-1">
+            Scoped Access
+          </span>
+        </div>
+      ) : activeNetworkCode !== 'ALL' ? (
+        <div className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-indigo-50/90 border border-indigo-200 text-indigo-900 text-xs font-bold w-fit shadow-2xs">
+          <Building2 className="w-4 h-4 text-indigo-600 shrink-0" />
+          <span>Filtered GAM Network: {activeNetworkCode}</span>
+        </div>
+      ) : null}
 
       {/* Search Bar */}
       <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between">
@@ -121,7 +177,7 @@ export const AdUnitsPage: React.FC = () => {
         {filtered.length === 0 ? (
           <div className="p-12 text-center text-slate-500">
             <Grid className="w-10 h-10 mx-auto mb-3 text-slate-300" />
-            <p className="text-sm font-medium">No ad units registered yet.</p>
+            <p className="text-sm font-medium">No ad units found for this partner network.</p>
             <button
               onClick={() => setIsModalOpen(true)}
               className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg text-xs font-semibold hover:bg-blue-700"
@@ -136,6 +192,7 @@ export const AdUnitsPage: React.FC = () => {
                 <tr className="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-600 uppercase">
                   <th className="py-3.5 px-6">Ad Unit Name</th>
                   <th className="py-3.5 px-6">Ad Unit Code</th>
+                  {isAdmin && <th className="py-3.5 px-6">Network</th>}
                   <th className="py-3.5 px-6">Google Ad Unit ID</th>
                   <th className="py-3.5 px-6">Sizes</th>
                   <th className="py-3.5 px-6">Status</th>
@@ -152,6 +209,11 @@ export const AdUnitsPage: React.FC = () => {
                     <td className="py-4 px-6 font-mono text-xs text-blue-600">
                       /{unit.code}
                     </td>
+                    {isAdmin && (
+                      <td className="py-4 px-6 font-mono text-xs text-slate-500">
+                        {unit.networkCode || 'Global'}
+                      </td>
+                    )}
                     <td className="py-4 px-6">
                       <button
                         onClick={() => copyText(unit.googleAdUnitId || 'Pending', unit.id)}

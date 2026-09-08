@@ -16,9 +16,11 @@ import {
   ChevronRight,
   Database,
   Trash2,
-  Upload
+  Upload,
+  Globe
 } from 'lucide-react';
 import { api } from '../services/api';
+import { useToast } from '../context/ToastContext';
 import { Campaign, GptTag, ApiLog } from '../types';
 import { WorkflowStepper } from '../components/WorkflowStepper';
 import { GptCodeModal } from '../components/GptCodeModal';
@@ -30,9 +32,11 @@ interface CampaignDetailPageProps {
 }
 
 export const CampaignDetailPage: React.FC<CampaignDetailPageProps> = ({ campaignId, onBack }) => {
+  const { success: toastSuccess, error: toastError } = useToast();
   const [campaign, setCampaign] = useState<Campaign | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [retrying, setRetrying] = useState<boolean>(false);
+  const [syncingCms, setSyncingCms] = useState<boolean>(false);
   const [selectedGptTag, setSelectedGptTag] = useState<GptTag | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [isBannerModalOpen, setIsBannerModalOpen] = useState<boolean>(false);
@@ -95,6 +99,24 @@ export const CampaignDetailPage: React.FC<CampaignDetailPageProps> = ({ campaign
     setTimeout(() => setCopiedId(null), 2000);
   };
 
+  const handleSyncToCms = async () => {
+    setSyncingCms(true);
+    try {
+      const res = await api.syncCampaignToCms(campaignId);
+      const first = res.data?.[0];
+      if (first?.success) {
+        toastSuccess('Synced to Partner CMS', first.message || 'Pushed GPT tags and container DIVs to partner CMS!');
+      } else {
+        toastError('CMS Sync Response', first?.error || first?.message || 'Sync encountered an issue.');
+      }
+      await fetchCampaign();
+    } catch (err: any) {
+      toastError('Sync Failed', err.response?.data?.error || err.message);
+    } finally {
+      setSyncingCms(false);
+    }
+  };
+
   if (loading || !campaign) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[400px] text-slate-500">
@@ -126,10 +148,26 @@ export const CampaignDetailPage: React.FC<CampaignDetailPageProps> = ({ campaign
                   Dry Run
                 </span>
               )}
+              {campaign.cmsSyncStatus && (
+                <span className={`text-xs px-2.5 py-0.5 rounded-full font-semibold flex items-center gap-1 ${
+                  campaign.cmsSyncStatus === 'SYNCED'
+                    ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                    : 'bg-amber-100 text-amber-800 border border-amber-200'
+                }`}>
+                  <Globe className="w-3 h-3" />
+                  CMS: {campaign.cmsSyncStatus}
+                </span>
+              )}
             </div>
             <p className="text-xs text-slate-500 mt-0.5">
               Flight: <span className="font-semibold text-slate-700">{campaign.startDate}</span> to{' '}
               <span className="font-semibold text-slate-700">{campaign.endDate}</span>
+              {campaign.createdBy && (
+                <span className="ml-2.5 inline-flex items-center gap-1 text-indigo-600 font-medium bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-100">
+                  <span>Created by:</span>
+                  <span className="font-semibold">{campaign.createdBy}</span>
+                </span>
+              )}
             </p>
           </div>
         </div>
@@ -141,6 +179,16 @@ export const CampaignDetailPage: React.FC<CampaignDetailPageProps> = ({ campaign
             title="Refresh status"
           >
             <RefreshCw className="w-4 h-4" />
+          </button>
+
+          <button
+            onClick={handleSyncToCms}
+            disabled={syncingCms}
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 text-xs font-semibold shadow-xs transition disabled:opacity-50"
+            title="Push generated GPT tags to configured CMS partner"
+          >
+            <Globe className={`w-3.5 h-3.5 ${syncingCms ? 'animate-spin' : ''}`} />
+            {syncingCms ? 'Pushing to CMS...' : 'Sync to Partner CMS'}
           </button>
 
           <button

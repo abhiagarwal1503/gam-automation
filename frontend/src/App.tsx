@@ -18,10 +18,14 @@ import { api } from './services/api';
 import { RefreshCw } from 'lucide-react';
 
 function AppContent() {
-  const { isAuthenticated, loading } = useAuth();
+  const { isAuthenticated, loading, isAdmin } = useAuth();
   const [activeTab, setActiveTab] = useState<string>('dashboard');
   const [selectedCampaignId, setSelectedCampaignId] = useState<string | null>(null);
   const [isGamConnected, setIsGamConnected] = useState<boolean>(false);
+
+  // Admin-only sections guard: Reports, Forecaster, GAM API Logs, Settings, GPT Generator
+  const adminOnlyTabs = ['reports', 'forecaster', 'logs', 'settings', 'gpt-generator'];
+  const effectiveTab = (!isAdmin && adminOnlyTabs.includes(activeTab)) ? 'dashboard' : activeTab;
 
   useEffect(() => {
     async function checkStatus() {
@@ -63,56 +67,60 @@ function AppContent() {
     <div className="min-h-screen mesh-gradient-bg flex flex-col font-sans selection:bg-blue-600 selection:text-white">
       {/* Top Navbar */}
       <Navbar
-        activeTab={activeTab === 'campaign-detail' ? 'campaigns' : activeTab}
+        activeTab={effectiveTab === 'campaign-detail' ? 'campaigns' : effectiveTab}
         setActiveTab={(tab) => {
           setSelectedCampaignId(null);
-          setActiveTab(tab);
+          if (!isAdmin && adminOnlyTabs.includes(tab)) {
+            setActiveTab('dashboard');
+          } else {
+            setActiveTab(tab);
+          }
         }}
         isGamConnected={isGamConnected}
       />
 
       {/* Main Content Area */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {activeTab === 'dashboard' && (
+        {effectiveTab === 'dashboard' && (
           <DashboardPage
             setActiveTab={setActiveTab}
             onSelectCampaign={handleSelectCampaign}
           />
         )}
 
-        {activeTab === 'campaigns' && (
+        {effectiveTab === 'campaigns' && (
           <CampaignsPage
             onSelectCampaign={handleSelectCampaign}
             onCreateNew={() => setActiveTab('create')}
           />
         )}
 
-        {activeTab === 'create' && (
+        {effectiveTab === 'create' && (
           <CreateCampaignPage
             onSuccess={handleCampaignCreated}
           />
         )}
 
-        {activeTab === 'campaign-detail' && selectedCampaignId && (
+        {effectiveTab === 'campaign-detail' && selectedCampaignId && (
           <CampaignDetailPage
             campaignId={selectedCampaignId}
             onBack={() => setActiveTab('campaigns')}
           />
         )}
 
-        {activeTab === 'ad-units' && <AdUnitsPage />}
+        {effectiveTab === 'ad-units' && <AdUnitsPage />}
 
-        {activeTab === 'advertisers' && <AdvertisersPage />}
+        {effectiveTab === 'advertisers' && <AdvertisersPage />}
 
-        {activeTab === 'reports' && <ReportsPage />}
+        {effectiveTab === 'reports' && isAdmin && <ReportsPage />}
 
-        {activeTab === 'forecaster' && <ForecasterPage />}
+        {effectiveTab === 'forecaster' && isAdmin && <ForecasterPage />}
 
-        {activeTab === 'gpt-generator' && <GptGeneratorPage />}
+        {effectiveTab === 'gpt-generator' && <GptGeneratorPage />}
 
-        {activeTab === 'logs' && <LogsPage />}
+        {effectiveTab === 'logs' && isAdmin && <LogsPage />}
 
-        {activeTab === 'settings' && <SettingsPage />}
+        {effectiveTab === 'settings' && isAdmin && <SettingsPage />}
       </main>
 
       {/* Footer */}

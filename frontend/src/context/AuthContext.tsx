@@ -6,9 +6,15 @@ interface AuthContextType {
   user: User | null;
   loading: boolean;
   login: (data: { email: string; password: string }) => Promise<void>;
-  register: (data: { name: string; email: string; password: string; role?: User['role'] }) => Promise<void>;
+  register: (data: { name: string; email: string; password: string; role?: User['role']; networkCode?: string; partnerName?: string; advertiserId?: string; advertiserName?: string }) => Promise<void>;
+  registerUserByAdmin: (data: { name: string; email: string; password: string; role?: User['role']; networkCode?: string; partnerName?: string; advertiserId?: string; advertiserName?: string }) => Promise<User>;
   logout: () => void;
   isAuthenticated: boolean;
+  isAdmin: boolean;
+  isPartnerScoped: boolean;
+  isAdvertiserScoped: boolean;
+  activeNetworkCode: string;
+  setActiveNetworkCode: (code: string) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -16,6 +22,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
+  const [adminSelectedNetwork, setAdminSelectedNetwork] = useState<string>('ALL');
 
   useEffect(() => {
     async function initAuth() {
@@ -44,16 +51,34 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setUser(res.user);
   };
 
-  const register = async (data: { name: string; email: string; password: string; role?: User['role'] }) => {
+  const register = async (data: { name: string; email: string; password: string; role?: User['role']; networkCode?: string; partnerName?: string; advertiserId?: string; advertiserName?: string }) => {
     const res = await api.register(data);
     localStorage.setItem('gam_auth_token', res.token);
     setUser(res.user);
   };
 
+  // Admin registers a user without overwriting their own admin session
+  const registerUserByAdmin = async (data: { name: string; email: string; password: string; role?: User['role']; networkCode?: string; partnerName?: string; advertiserId?: string; advertiserName?: string }): Promise<User> => {
+    const res = await api.register(data);
+    return res.user;
+  };
+
   const logout = () => {
     localStorage.removeItem('gam_auth_token');
     setUser(null);
+    setAdminSelectedNetwork('ALL');
   };
+
+  const isAdmin = Boolean(user && user.role === 'admin');
+  const isPartnerScoped = Boolean(user && user.role !== 'admin' && user.networkCode && user.networkCode !== 'ALL');
+  const isAdvertiserScoped = Boolean(
+    user &&
+    user.role !== 'admin' &&
+    user.advertiserName &&
+    user.advertiserName !== 'All Advertisers' &&
+    user.advertiserId !== 'ALL'
+  );
+  const activeNetworkCode = isPartnerScoped ? (user?.networkCode || 'ALL') : adminSelectedNetwork;
 
   return (
     <AuthContext.Provider
@@ -62,8 +87,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         loading,
         login,
         register,
+        registerUserByAdmin,
         logout,
-        isAuthenticated: Boolean(user)
+        isAuthenticated: Boolean(user),
+        isAdmin,
+        isPartnerScoped,
+        isAdvertiserScoped,
+        activeNetworkCode,
+        setActiveNetworkCode: (code: string) => {
+          if (isAdmin) {
+            setAdminSelectedNetwork(code);
+          }
+        }
       }}
     >
       {children}

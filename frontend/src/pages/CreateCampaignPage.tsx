@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { api } from '../services/api';
 import { useToast } from '../context/ToastContext';
+import { useAuth } from '../context/AuthContext';
 import { ImagePreview } from '../components/ImagePreview';
 import { resizeImageToAdSize } from '../utils/imageResizer';
 import { AdSize } from '../types';
@@ -55,6 +56,13 @@ const NETWORK_ADVERTISERS: Record<string, { id: string; name: string }[]> = {
     { id: '5247096423', name: 'srgd' },
     { id: '6155963446', name: 'TechStar Brand' },
     { id: '6155883565', name: 'testingforatuo' }
+  ],
+  '22665183713': [
+    { id: '6156180871', name: 'The Federal Sponsor' },
+    { id: '6156180872', name: 'Federal National Brands' },
+    { id: '6156180873', name: 'Federal Retail Agency' },
+    { id: '5225386500', name: 'Hocalwire Media' },
+    { id: '5234810863', name: 'Google Marketing' }
   ],
   '22827981500': [
     { id: '5264533411', name: 'CG Samvad' },
@@ -113,6 +121,8 @@ const DEFAULT_SIZES: AdSize[] = [
 ];
 
 export const CreateCampaignPage: React.FC<CreateCampaignPageProps> = ({ onSuccess }) => {
+  const { user, isAdmin, isPartnerScoped, isAdvertiserScoped, activeNetworkCode } = useAuth();
+
   // Network selection — null by default so user must explicitly choose
   const [selectedNetwork, setSelectedNetwork] = useState<{ name: string; code: string } | null>(null);
 
@@ -263,12 +273,37 @@ export const CreateCampaignPage: React.FC<CreateCampaignPageProps> = ({ onSucces
     } else {
       setGamAdvertisers([]);
     }
-    setAdvertiserQuery('');
-    setSelectedAdvertiserId(null);
+    if (isAdvertiserScoped && user?.advertiserName) {
+      setAdvertiserQuery(user.advertiserName);
+      setSelectedAdvertiserId(user.advertiserId && user.advertiserId !== 'ALL' ? user.advertiserId : null);
+    } else {
+      setAdvertiserQuery('');
+      setSelectedAdvertiserId(null);
+    }
     try {
-      const data = await api.getGamAdvertisers(cleanCode);
-      if (data && data.length > 0) {
-        setGamAdvertisers(data);
+      const [gamRes, dbRes] = await Promise.allSettled([
+        api.getGamAdvertisers(cleanCode),
+        api.getAdvertisers(cleanCode)
+      ]);
+      const gamList = gamRes.status === 'fulfilled' && Array.isArray(gamRes.value) ? gamRes.value : [];
+      const dbList = dbRes.status === 'fulfilled' && Array.isArray(dbRes.value) ? dbRes.value.map(a => ({ id: a.id, name: a.name })) : [];
+      const baseList = NETWORK_ADVERTISERS[cleanCode] || [];
+
+      const mergedMap = new Map<string, { id: string; name: string }>();
+      baseList.forEach(a => mergedMap.set(a.name.toLowerCase(), a));
+      dbList.forEach(a => mergedMap.set(a.name.toLowerCase(), a));
+      gamList.forEach(a => mergedMap.set(a.name.toLowerCase(), a));
+
+      const allMerged = Array.from(mergedMap.values()).sort((a, b) => a.name.localeCompare(b.name));
+      if (allMerged.length > 0) {
+        setGamAdvertisers(allMerged);
+        if (isAdvertiserScoped && user?.advertiserName) {
+          const match = allMerged.find(a => a.name.toLowerCase() === user.advertiserName!.toLowerCase() || (user.advertiserId && a.id === user.advertiserId));
+          if (match) {
+            setSelectedAdvertiserId(match.id);
+            setAdvertiserQuery(match.name);
+          }
+        }
       }
     } catch (err: any) {
       if (!NETWORK_ADVERTISERS[cleanCode]) {
@@ -306,6 +341,34 @@ export const CreateCampaignPage: React.FC<CreateCampaignPageProps> = ({ onSucces
       setSelectedAdvertiserId(null);
     }
   }, [selectedNetwork]);
+
+  // Auto-lock or initialize network selection based on user scope or admin active network
+  useEffect(() => {
+    if (isPartnerScoped && user?.networkCode) {
+      const match = GAM_NETWORKS.find(n => n.code === user.networkCode);
+      setSelectedNetwork({
+        name: match ? match.name : (user.partnerName || `Partner Network (${user.networkCode})`),
+        code: user.networkCode
+      });
+      setCustomNetworkCode(user.networkCode);
+    } else if (isAdmin && activeNetworkCode && activeNetworkCode !== 'ALL') {
+      const match = GAM_NETWORKS.find(n => n.code === activeNetworkCode);
+      if (match) {
+        setSelectedNetwork(match);
+        setCustomNetworkCode(match.code);
+      }
+    }
+  }, [isPartnerScoped, user?.networkCode, user?.partnerName, isAdmin, activeNetworkCode]);
+
+  // Auto-lock advertiser query and ID when user is scoped to a specific advertiser
+  useEffect(() => {
+    if (isAdvertiserScoped && user?.advertiserName) {
+      setAdvertiserQuery(user.advertiserName);
+      if (user.advertiserId && user.advertiserId !== 'ALL') {
+        setSelectedAdvertiserId(user.advertiserId);
+      }
+    }
+  }, [isAdvertiserScoped, user?.advertiserName, user?.advertiserId]);
 
   // When selected sizes change, re-run auto-resize
   useEffect(() => {
@@ -356,36 +419,111 @@ export const CreateCampaignPage: React.FC<CreateCampaignPageProps> = ({ onSucces
   };
 
   const setDemoData = () => {
-    setSelectedNetwork(GAM_NETWORKS[0]);
-    setAdvertiserQuery('TechStar Brand');
-    setSelectedAdvertiserId(null);
-    setTargetUrl('https://www.google.com');
+    // 1. Identify which partner network to use (never blindly reset to Blinkcorp)
+    let targetNet = selectedNetwork;
+    if (isPartnerScoped && user?.networkCode) {
+      const match = GAM_NETWORKS.find(n => n.code === user.networkCode);
+      targetNet = match || { name: user.partnerName || 'Partner Network', code: user.networkCode };
+    } else if (isAdmin && activeNetworkCode && activeNetworkCode !== 'ALL') {
+      const match = GAM_NETWORKS.find(n => n.code === activeNetworkCode);
+      if (match) targetNet = match;
+    }
+    if (!targetNet) {
+      targetNet = GAM_NETWORKS[0];
+    }
+
+    setSelectedNetwork(targetNet);
+    setCustomNetworkCode(targetNet.code);
+
+    const netCode = targetNet.code;
+    const knownAdvertisers = NETWORK_ADVERTISERS[netCode] || [];
+    let sampleAdv: { id: string | null; name: string } = knownAdvertisers[0] || { id: null, name: 'Partner Sponsor' };
+
+    // Select partner-appropriate sample advertiser & custom branding
+    let sampleCampaignName = `${targetNet.name.split(' ')[0]} Brand Campaign 2026`;
+    let sampleTargetUrl = 'https://www.google.com';
+    let bannerHeadline = 'SPECIAL OFFER 2026';
+    let gradStart = '#2563eb';
+    let gradEnd = '#7c3aed';
+
+    if (netCode === '22665183713') {
+      sampleAdv = { id: '6156180871', name: 'The Federal Sponsor' };
+      sampleCampaignName = 'The Federal Digital Brand Campaign 2026';
+      sampleTargetUrl = 'https://thefederal.com';
+      bannerHeadline = 'THE FEDERAL EXCLUSIVE 2026';
+      gradStart = '#0f766e'; // teal
+      gradEnd = '#1e3a8a';   // deep blue
+    } else if (netCode === '22068249324') {
+      sampleAdv = { id: '6155963446', name: 'TechStar Brand' };
+      sampleCampaignName = 'Blink Technologies Spotlight Campaign 2026';
+      sampleTargetUrl = 'https://blinkcorp.com';
+      bannerHeadline = 'BLINK CORP 2026';
+      gradStart = '#2563eb';
+      gradEnd = '#7c3aed';
+    } else if (netCode === '22212039110') {
+      sampleAdv = { id: '5236392682', name: 'Newstrack' };
+      sampleCampaignName = 'News Track Digital Campaign 2026';
+      sampleTargetUrl = 'https://newstrack.com';
+      bannerHeadline = 'NEWS TRACK 2026';
+      gradStart = '#dc2626';
+      gradEnd = '#1e293b';
+    } else if (netCode === '22827981500') {
+      sampleAdv = { id: '5264533411', name: 'CG Samvad' };
+      sampleCampaignName = 'Powergame Ad Campaign 2026';
+      sampleTargetUrl = 'https://newpowergame.com';
+      bannerHeadline = 'POWERGAME 2026';
+      gradStart = '#d97706';
+      gradEnd = '#431407';
+    } else if (netCode === '310443190') {
+      sampleAdv = { id: '4151784030', name: 'HANS' };
+      sampleCampaignName = 'HANS Media Campaign 2026';
+      sampleTargetUrl = 'https://thehansindia.com';
+      bannerHeadline = 'HANS INDIA 2026';
+      gradStart = '#4f46e5';
+      gradEnd = '#1e1b4b';
+    }
+
+    // If user is scoped to a specific advertiser, strictly retain that advertiser
+    if (isAdvertiserScoped && user?.advertiserName) {
+      sampleAdv = {
+        id: user.advertiserId && user.advertiserId !== 'ALL' ? user.advertiserId : null,
+        name: user.advertiserName
+      };
+      sampleCampaignName = `${user.advertiserName} Campaign 2026`;
+    }
+
+    setCustomName(sampleCampaignName);
+    setAdvertiserQuery(sampleAdv.name);
+    setSelectedAdvertiserId(sampleAdv.id);
+    setTargetUrl(sampleTargetUrl);
+
     const d1 = new Date();
     const d2 = new Date();
     d2.setDate(d2.getDate() + 14);
     setStartDate(d1.toISOString().split('T')[0]);
     setEndDate(d2.toISOString().split('T')[0]);
     setSelectedSizes([DEFAULT_SIZES[0]]);
-    // Create simulated sample banner
+
+    // Create simulated sample banner tailored to the active partner
     const canvas = document.createElement('canvas');
     canvas.width = 600;
     canvas.height = 500;
     const ctx = canvas.getContext('2d');
     if (ctx) {
       const grad = ctx.createLinearGradient(0, 0, 600, 500);
-      grad.addColorStop(0, '#2563eb');
-      grad.addColorStop(1, '#7c3aed');
+      grad.addColorStop(0, gradStart);
+      grad.addColorStop(1, gradEnd);
       ctx.fillStyle = grad;
       ctx.fillRect(0, 0, 600, 500);
       ctx.fillStyle = '#ffffff';
       ctx.font = 'bold 36px sans-serif';
       ctx.textAlign = 'center';
-      ctx.fillText('SPECIAL OFFER 2026', 300, 240);
+      ctx.fillText(bannerHeadline, 300, 240);
       ctx.font = '22px sans-serif';
-      ctx.fillText('Auto-Resizing Banner Demo', 300, 290);
+      ctx.fillText(`${sampleAdv.name} • Partner Ad Demo`, 300, 290);
       const demoUrl = canvas.toDataURL('image/jpeg', 0.95);
       setRawBannerDataUrl(demoUrl);
-      setUploadedFileName('demo_banner_asset.jpg');
+      setUploadedFileName(`${sampleAdv.name.toLowerCase().replace(/[^a-z0-9]+/g, '_')}_demo_banner.jpg`);
       setOriginalDimensions({ width: 600, height: 500 });
       performAutoResize(demoUrl, [DEFAULT_SIZES[0]]);
     }
@@ -446,6 +584,8 @@ export const CreateCampaignPage: React.FC<CreateCampaignPageProps> = ({ onSucces
         sizes: selectedSizes,
         position,
         isDryRun,
+        createdBy: user ? `${user.name} (${user.email})` : undefined,
+        creatorEmail: user?.email
       });
       if (result.campaignId) {
         onSuccess(result.campaignId);
@@ -473,10 +613,50 @@ export const CreateCampaignPage: React.FC<CreateCampaignPageProps> = ({ onSucces
           type="button"
           onClick={setDemoData}
           className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-lg transition self-start sm:self-auto"
+          title={`Fill sample campaign data for ${isPartnerScoped ? (user?.partnerName || 'Partner') : (selectedNetwork?.name || 'selected network')}`}
         >
           <Sparkles className="w-3.5 h-3.5" />
-          Fill Demo Data
+          Fill Demo Data {isPartnerScoped && user?.partnerName ? `(${user.partnerName})` : ''}
         </button>
+      </div>
+
+      {/* Account Info Banner - Shows which account is creating this campaign */}
+      <div className="bg-slate-900 text-white rounded-2xl p-4 sm:p-5 shadow-sm border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex items-center gap-3.5">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center font-bold text-white shadow-md text-base">
+            {user?.name ? user.name.charAt(0).toUpperCase() : 'U'}
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Creating Account:</span>
+              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase ${
+                user?.role === 'admin'
+                  ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30'
+                  : 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
+              }`}>
+                {user?.role || 'User'}
+              </span>
+            </div>
+            <div className="font-bold text-sm sm:text-base text-white">
+              {user?.name || 'Current User'} <span className="font-normal text-xs text-slate-400">({user?.email || 'N/A'})</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="sm:text-right border-t sm:border-t-0 pt-2 sm:pt-0 border-slate-800 flex sm:flex-col items-center sm:items-end justify-between gap-1">
+          <span className="text-[11px] text-slate-400 font-medium">Mapped Partner Scope:</span>
+          <span className="text-xs font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 rounded-lg">
+            {user?.networkCode === 'ALL' || !user?.networkCode ? '🌐 All Networks (Global Admin)' : `🏢 ${user?.partnerName || user?.networkCode}`}
+          </span>
+          {isAdvertiserScoped && (
+            <div className="flex items-center gap-1.5 mt-1">
+              <span className="text-[11px] text-purple-300 font-medium">Assigned Advertiser:</span>
+              <span className="text-xs font-bold text-purple-300 bg-purple-500/20 border border-purple-500/30 px-2.5 py-0.5 rounded-lg">
+                🎯 {user?.advertiserName}
+              </span>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Network Selector */}
@@ -487,16 +667,18 @@ export const CreateCampaignPage: React.FC<CreateCampaignPageProps> = ({ onSucces
             <h2 className="text-sm font-bold text-slate-900">Network Code <span className="text-rose-500">*</span></h2>
           </div>
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setIsCustomMode(!isCustomMode)}
-              className="text-xs text-blue-600 hover:text-blue-800 font-semibold underline underline-offset-2"
-            >
-              {isCustomMode ? '← Pick from list' : '+ Enter custom network code'}
-            </button>
+            {!isPartnerScoped && (
+              <button
+                type="button"
+                onClick={() => setIsCustomMode(!isCustomMode)}
+                className="text-xs text-blue-600 hover:text-blue-800 font-semibold underline underline-offset-2"
+              >
+                {isCustomMode ? '← Pick from list' : '+ Enter custom network code'}
+              </button>
+            )}
             {selectedNetwork ? (
               <span className="text-xs text-emerald-600 font-semibold bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
-                Active: {selectedNetwork.name} ({selectedNetwork.code})
+                {isPartnerScoped ? 'Locked Scope:' : 'Active:'} {selectedNetwork.name} ({selectedNetwork.code})
               </span>
             ) : (
               <span className="text-xs text-amber-600 font-semibold bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">
@@ -506,7 +688,20 @@ export const CreateCampaignPage: React.FC<CreateCampaignPageProps> = ({ onSucces
           </div>
         </div>
 
-        {isCustomMode ? (
+        {isPartnerScoped ? (
+          <div className="flex items-center gap-3.5 p-4 bg-gradient-to-r from-blue-50/80 to-indigo-50/60 border border-blue-200/80 rounded-2xl text-xs text-blue-900">
+            <div className="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center font-bold shadow-sm">
+              <Building2 className="w-5 h-5" />
+            </div>
+            <div className="space-y-0.5">
+              <div className="font-bold text-sm text-slate-900">{selectedNetwork?.name || user?.partnerName}</div>
+              <div className="text-slate-500 font-mono text-xs">
+                GAM Network Code: <span className="font-bold text-blue-700">{selectedNetwork?.code || user?.networkCode}</span>
+                <span className="ml-2 text-[11px] px-2 py-0.5 bg-blue-100 text-blue-800 rounded-full font-sans font-medium">Mapped Partner Scope</span>
+              </div>
+            </div>
+          </div>
+        ) : isCustomMode ? (
           <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
             <label className="block text-xs font-bold uppercase text-slate-700">Enter Network Code</label>
             <div className="flex gap-2">
@@ -581,7 +776,7 @@ export const CreateCampaignPage: React.FC<CreateCampaignPageProps> = ({ onSucces
               <label className="block text-sm font-semibold text-slate-900">
                 Advertiser / Company <span className="text-rose-500">*</span>
               </label>
-              {selectedNetwork && (
+              {!isAdvertiserScoped && selectedNetwork && (
                 <button
                   type="button"
                   onClick={() => loadAdvertisers(selectedNetwork.code)}
@@ -595,102 +790,124 @@ export const CreateCampaignPage: React.FC<CreateCampaignPageProps> = ({ onSucces
               )}
             </div>
 
-            <div className="relative">
-              {/* Input */}
-              <div className="relative">
-                <Building2 className="w-4 h-4 absolute left-3.5 top-3 text-slate-400" />
-                <input
-                  type="text"
-                  placeholder={
-                    !selectedNetwork
-                      ? '← Select a network above first'
-                      : advertiserLoading
-                      ? 'Loading advertisers from GAM...'
-                      : 'Search or type advertiser name...'
-                  }
-                  value={advertiserQuery}
-                  disabled={!selectedNetwork || advertiserLoading}
-                  onChange={(e) => {
-                    setAdvertiserQuery(e.target.value);
-                    setSelectedAdvertiserId(null);
-                    setAdvertiserDropdownOpen(true);
-                  }}
-                  onFocus={() => {
-                    if (selectedNetwork) setAdvertiserDropdownOpen(true);
-                  }}
-                  className="w-full pl-10 pr-10 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 text-sm disabled:opacity-60 disabled:bg-slate-50"
-                />
-                <div className="absolute right-3.5 top-3">
-                  {advertiserLoading
-                    ? <Loader2 className="w-4 h-4 text-blue-500 animate-spin" />
-                    : <ChevronDown className="w-4 h-4 text-slate-400" />
-                  }
+            {isAdvertiserScoped ? (
+              <div className="flex items-center justify-between p-3.5 bg-gradient-to-r from-purple-50/90 to-indigo-50/70 border border-purple-200/80 rounded-2xl shadow-xs">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-purple-600 text-white flex items-center justify-center font-bold text-base shadow-sm">
+                    🎯
+                  </div>
+                  <div>
+                    <div className="text-sm font-bold text-slate-900">{user?.advertiserName}</div>
+                    <div className="text-xs text-purple-700 font-mono flex items-center gap-2 mt-0.5">
+                      <span>{selectedAdvertiserId || (user?.advertiserId !== 'ALL' ? user?.advertiserId : 'Assigned Advertiser')}</span>
+                      <span className="px-2 py-0.5 bg-purple-100 text-purple-800 rounded-full font-sans font-medium text-[11px]">
+                        Locked to Account
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                <div className="text-[11px] text-purple-700 font-medium bg-purple-100/60 px-3 py-1 rounded-lg border border-purple-200/60 hidden sm:block">
+                  Account Restricted
                 </div>
               </div>
-
-              {/* Selected badge */}
-              {selectedAdvertiserId && (
-                <div className="mt-1.5 flex items-center gap-1.5 text-xs text-emerald-700 font-semibold">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" />
-                  Existing GAM Advertiser selected (ID: {selectedAdvertiserId})
-                </div>
-              )}
-              {!selectedAdvertiserId && advertiserQuery && !advertiserLoading && (
-                <div className="mt-1.5 flex items-center gap-1.5 text-xs text-amber-700 font-semibold">
-                  <UserPlus className="w-3 h-3" />
-                  Will create new advertiser in GAM
-                </div>
-              )}
-
-              {/* Dropdown */}
-              {advertiserDropdownOpen && !advertiserLoading && selectedNetwork && (
-                <div className="absolute z-50 mt-1 w-full bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden">
-                  {/* Search icon in dropdown */}
-                  <div className="px-3 pt-2 pb-1 text-[11px] text-slate-400 uppercase tracking-wider font-semibold border-b border-slate-100">
-                    {filteredAdvertisers.length} advertiser{filteredAdvertisers.length !== 1 ? 's' : ''} in {selectedNetwork.name}
+            ) : (
+              <div className="relative">
+                {/* Input */}
+                <div className="relative">
+                  <Building2 className="w-4 h-4 absolute left-3.5 top-3 text-slate-400" />
+                  <input
+                    type="text"
+                    placeholder={
+                      !selectedNetwork
+                        ? '← Select a network above first'
+                        : advertiserLoading
+                        ? 'Loading advertisers from GAM...'
+                        : 'Search or type advertiser name...'
+                    }
+                    value={advertiserQuery}
+                    disabled={!selectedNetwork || advertiserLoading}
+                    onChange={(e) => {
+                      setAdvertiserQuery(e.target.value);
+                      setSelectedAdvertiserId(null);
+                      setAdvertiserDropdownOpen(true);
+                    }}
+                    onFocus={() => {
+                      if (selectedNetwork) setAdvertiserDropdownOpen(true);
+                    }}
+                    className="w-full pl-10 pr-10 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 text-sm disabled:opacity-60 disabled:bg-slate-50"
+                  />
+                  <div className="absolute right-3.5 top-3">
+                    {advertiserLoading
+                      ? <Loader2 className="w-4 h-4 text-blue-500 animate-spin" />
+                      : <ChevronDown className="w-4 h-4 text-slate-400" />
+                    }
                   </div>
-                  <div className="max-h-56 overflow-y-auto">
-                    {filteredAdvertisers.length === 0 && advertiserQuery && (
-                      <div className="px-4 py-3 text-xs text-slate-500 italic">No match found for "{advertiserQuery}"</div>
+                </div>
+
+                {/* Selected badge */}
+                {selectedAdvertiserId && (
+                  <div className="mt-1.5 flex items-center gap-1.5 text-xs text-emerald-700 font-semibold">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" />
+                    Existing GAM Advertiser selected (ID: {selectedAdvertiserId})
+                  </div>
+                )}
+                {!selectedAdvertiserId && advertiserQuery && !advertiserLoading && (
+                  <div className="mt-1.5 flex items-center gap-1.5 text-xs text-amber-700 font-semibold">
+                    <UserPlus className="w-3 h-3" />
+                    Will create new advertiser in GAM
+                  </div>
+                )}
+
+                {/* Dropdown */}
+                {advertiserDropdownOpen && !advertiserLoading && selectedNetwork && (
+                  <div className="absolute z-50 mt-1 w-full bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden">
+                    {/* Search icon in dropdown */}
+                    <div className="px-3 pt-2 pb-1 text-[11px] text-slate-400 uppercase tracking-wider font-semibold border-b border-slate-100">
+                      {filteredAdvertisers.length} advertiser{filteredAdvertisers.length !== 1 ? 's' : ''} in {selectedNetwork.name}
+                    </div>
+                    <div className="max-h-56 overflow-y-auto">
+                      {filteredAdvertisers.length === 0 && advertiserQuery && (
+                        <div className="px-4 py-3 text-xs text-slate-500 italic">No match found for "{advertiserQuery}"</div>
+                      )}
+                      {filteredAdvertisers.map(adv => (
+                        <button
+                          key={adv.id}
+                          type="button"
+                          onClick={() => handleSelectAdvertiser(adv)}
+                          className="w-full text-left px-4 py-2.5 hover:bg-blue-50 transition flex items-center justify-between group"
+                        >
+                          <div>
+                            <div className="text-sm font-semibold text-slate-900 group-hover:text-blue-700">{adv.name}</div>
+                            <div className="text-[11px] font-mono text-slate-400">GAM ID: {adv.id}</div>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                    {/* Create New option */}
+                    {advertiserQuery && !exactMatch && (
+                      <div className="border-t border-slate-100">
+                        <button
+                          type="button"
+                          onClick={handleCreateNew}
+                          className="w-full text-left px-4 py-3 hover:bg-amber-50 transition flex items-center gap-2"
+                        >
+                          <UserPlus className="w-4 h-4 text-amber-600" />
+                          <div>
+                            <div className="text-sm font-semibold text-amber-700">Create new: "{advertiserQuery}"</div>
+                            <div className="text-[11px] text-slate-400">Will create a new Advertiser in GAM</div>
+                          </div>
+                        </button>
+                      </div>
                     )}
-                    {filteredAdvertisers.map(adv => (
-                      <button
-                        key={adv.id}
-                        type="button"
-                        onClick={() => handleSelectAdvertiser(adv)}
-                        className="w-full text-left px-4 py-2.5 hover:bg-blue-50 transition flex items-center justify-between group"
-                      >
-                        <div>
-                          <div className="text-sm font-semibold text-slate-900 group-hover:text-blue-700">{adv.name}</div>
-                          <div className="text-[11px] font-mono text-slate-400">GAM ID: {adv.id}</div>
-                        </div>
-                      </button>
-                    ))}
+                    {advertiserError && (
+                      <div className="px-4 py-2 text-xs text-rose-600 bg-rose-50 border-t border-rose-100">
+                        ⚠ {advertiserError}
+                      </div>
+                    )}
                   </div>
-                  {/* Create New option */}
-                  {advertiserQuery && !exactMatch && (
-                    <div className="border-t border-slate-100">
-                      <button
-                        type="button"
-                        onClick={handleCreateNew}
-                        className="w-full text-left px-4 py-3 hover:bg-amber-50 transition flex items-center gap-2"
-                      >
-                        <UserPlus className="w-4 h-4 text-amber-600" />
-                        <div>
-                          <div className="text-sm font-semibold text-amber-700">Create new: "{advertiserQuery}"</div>
-                          <div className="text-[11px] text-slate-400">Will create a new Advertiser in GAM</div>
-                        </div>
-                      </button>
-                    </div>
-                  )}
-                  {advertiserError && (
-                    <div className="px-4 py-2 text-xs text-rose-600 bg-rose-50 border-t border-rose-100">
-                      ⚠ {advertiserError}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* ---- GAM Campaign / Entity Name (Custom Prefix) ---- */}

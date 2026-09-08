@@ -7,7 +7,6 @@ import {
   Shield,
   Eye,
   EyeOff,
-  Sparkles,
   ArrowRight,
   Loader2,
   AlertCircle,
@@ -19,14 +18,11 @@ import {
 import { useAuth } from '../context/AuthContext';
 
 export const LoginPage: React.FC = () => {
-  const { login, register } = useAuth();
-  const [tab, setTab] = useState<'login' | 'register'>('login');
+  const { login } = useAuth();
 
   // Form states
-  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [role, setRole] = useState<'admin' | 'trafficker' | 'publisher' | 'adops'>('trafficker');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -37,23 +33,12 @@ export const LoginPage: React.FC = () => {
     setLoading(true);
 
     try {
-      if (tab === 'login') {
-        await login({ email, password });
-      } else {
-        await register({ name, email, password, role });
-      }
+      await login({ email, password });
     } catch (err: any) {
       setError(err?.response?.data?.error || err.message || 'Authentication failed. Please check credentials.');
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleFillDemo = (demoEmail: string, demoPass: string) => {
-    setEmail(demoEmail);
-    setPassword(demoPass);
-    setTab('login');
-    setError(null);
   };
 
   return (
@@ -139,32 +124,12 @@ export const LoginPage: React.FC = () => {
         <div className="lg:col-span-6 p-8 sm:p-12 flex flex-col justify-center bg-slate-900/50">
           <div className="max-w-md w-full mx-auto space-y-6">
             
-            {/* Header / Tab Switcher */}
+            {/* Header */}
             <div>
-              <div className="grid grid-cols-2 p-1 bg-slate-800/80 border border-slate-700/60 rounded-xl text-xs font-semibold">
-                <button
-                  type="button"
-                  onClick={() => { setTab('login'); setError(null); }}
-                  className={`py-2.5 rounded-lg transition-all ${
-                    tab === 'login'
-                      ? 'bg-blue-600 text-white shadow-sm'
-                      : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  Sign In
-                </button>
-                <button
-                  type="button"
-                  onClick={() => { setTab('register'); setError(null); }}
-                  className={`py-2.5 rounded-lg transition-all ${
-                    tab === 'register'
-                      ? 'bg-blue-600 text-white shadow-sm'
-                      : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  Register New User
-                </button>
-              </div>
+              <h2 className="text-xl font-bold text-white tracking-tight">Sign In to Dashboard</h2>
+              <p className="text-xs text-slate-400 mt-1">
+                Enter your credentials to access your assigned partner workspace.
+              </p>
             </div>
 
             {/* Error Banner */}
@@ -177,42 +142,6 @@ export const LoginPage: React.FC = () => {
 
             {/* Form */}
             <form onSubmit={handleSubmit} className="space-y-4">
-              {tab === 'register' && (
-                <>
-                  <div className="space-y-1.5">
-                    <label className="block text-xs font-semibold text-slate-300">Full Name</label>
-                    <div className="relative">
-                      <User className="w-4 h-4 absolute left-3.5 top-3.5 text-slate-500" />
-                      <input
-                        type="text"
-                        required
-                        placeholder="e.g. Alex Sharma"
-                        value={name}
-                        onChange={(e) => setName(e.target.value)}
-                        className="w-full pl-10 pr-4 py-3 rounded-xl bg-slate-800/80 border border-slate-700 text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition placeholder:text-slate-500"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label className="block text-xs font-semibold text-slate-300">Role / Position</label>
-                    <div className="relative">
-                      <Shield className="w-4 h-4 absolute left-3.5 top-3.5 text-slate-500" />
-                      <select
-                        value={role}
-                        onChange={(e) => setRole(e.target.value as any)}
-                        className="w-full pl-10 pr-4 py-3 rounded-xl bg-slate-800 border border-slate-700 text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
-                      >
-                        <option value="trafficker">Ad Trafficker</option>
-                        <option value="adops">AdOps Manager</option>
-                        <option value="publisher">Publisher / Editor</option>
-                        <option value="admin">Administrator</option>
-                      </select>
-                    </div>
-                  </div>
-                </>
-              )}
-
               <div className="space-y-1.5">
                 <label className="block text-xs font-semibold text-slate-300">Work Email</label>
                 <div className="relative">
@@ -260,26 +189,18 @@ export const LoginPage: React.FC = () => {
                   <Loader2 className="w-5 h-5 animate-spin" />
                 ) : (
                   <>
-                    <span>{tab === 'login' ? 'Sign In to Dashboard' : 'Create New Account'}</span>
+                    <span>Sign In to Dashboard</span>
                     <ArrowRight className="w-4 h-4" />
                   </>
                 )}
               </button>
             </form>
 
-            {/* Instant Demo Access Button */}
-            <div className="pt-4 border-t border-slate-800/80 flex flex-col items-center gap-2">
-              <p className="text-xs text-slate-500">Need immediate demo access?</p>
-              <button
-                type="button"
-                onClick={() => handleFillDemo('admin@gam.io', 'Admin@12345')}
-                className="w-full py-2.5 px-4 rounded-xl bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700 text-xs font-semibold text-blue-400 hover:text-blue-300 flex items-center justify-center gap-2 transition"
-              >
-                <Sparkles className="w-3.5 h-3.5 text-blue-400" />
-                Use Admin Demo Credentials (admin@gam.io)
-              </button>
+            {/* Admin-only Provisioning Notice */}
+            <div className="p-3 rounded-xl bg-slate-800/50 border border-slate-700/60 text-[11px] text-slate-400 flex items-start gap-2">
+              <Shield className="w-3.5 h-3.5 text-indigo-400 shrink-0 mt-0.5" />
+              <span>User accounts and partner network mappings are provisioned strictly by Administrators in Settings.</span>
             </div>
-
           </div>
         </div>
 

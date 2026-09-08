@@ -1,8 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { Megaphone, PlusCircle, Search, RefreshCw, Filter, ArrowUpRight, Trash2, Upload } from 'lucide-react';
+import { Megaphone, PlusCircle, Search, RefreshCw, Filter, ArrowUpRight, Trash2, Upload, Layers, Building2 } from 'lucide-react';
 import { api } from '../services/api';
-import { Campaign } from '../types';
+import { Campaign, CampaignStatus } from '../types';
 import { BulkBannerChangeModal } from '../components/BulkBannerChangeModal';
+import { useAuth } from '../context/AuthContext';
+import { NETWORK_ADVERTISERS } from '../constants/networks';
 
 interface CampaignsPageProps {
   onSelectCampaign: (id: string) => void;
@@ -10,16 +12,51 @@ interface CampaignsPageProps {
 }
 
 export const CampaignsPage: React.FC<CampaignsPageProps> = ({ onSelectCampaign, onCreateNew }) => {
+  const { user, isAdmin, isPartnerScoped, isAdvertiserScoped, activeNetworkCode } = useAuth();
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+  const [partnerAdvertisers, setPartnerAdvertisers] = useState<string[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [search, setSearch] = useState<string>('');
   const [filterStatus, setFilterStatus] = useState<string>('ALL');
+  const [filterAdvertiser, setFilterAdvertiser] = useState<string>('ALL');
   const [activeBannerCampaign, setActiveBannerCampaign] = useState<Campaign | null>(null);
+
+  useEffect(() => {
+    if (isAdvertiserScoped && user?.advertiserName) {
+      setFilterAdvertiser(user.advertiserName);
+    }
+  }, [isAdvertiserScoped, user?.advertiserName]);
+
+  // Load advertisers strictly for the active partner network
+  useEffect(() => {
+    async function loadPartnerAdvertisers() {
+      if (isAdvertiserScoped && user?.advertiserName) {
+        setPartnerAdvertisers([user.advertiserName]);
+        return;
+      }
+      const netCode = isPartnerScoped ? user?.networkCode : (activeNetworkCode !== 'ALL' ? activeNetworkCode : undefined);
+      try {
+        const advList = await api.getAdvertisers(netCode);
+        const names = advList.map(a => a.name).filter(Boolean);
+        const known = (netCode && NETWORK_ADVERTISERS[netCode]) ? NETWORK_ADVERTISERS[netCode].map(a => a.name) : [];
+        const combined = Array.from(new Set([...names, ...known])).sort();
+        setPartnerAdvertisers(combined);
+      } catch (e) {
+        const known = (netCode && NETWORK_ADVERTISERS[netCode]) ? NETWORK_ADVERTISERS[netCode].map(a => a.name) : [];
+        setPartnerAdvertisers(known);
+      }
+    }
+    loadPartnerAdvertisers();
+    if (!isAdvertiserScoped) {
+      setFilterAdvertiser('ALL');
+    }
+  }, [activeNetworkCode, isPartnerScoped, user?.networkCode, isAdvertiserScoped, user?.advertiserName]);
 
   const fetchCampaigns = async () => {
     setLoading(true);
     try {
-      const list = await api.getCampaigns();
+      const activeAdv = isAdvertiserScoped ? user?.advertiserName : (filterAdvertiser !== 'ALL' ? filterAdvertiser : undefined);
+      const list = await api.getCampaigns(activeNetworkCode, activeAdv);
       setCampaigns(list);
     } catch (err) {
       console.error('Failed to load campaigns:', err);
@@ -30,13 +67,26 @@ export const CampaignsPage: React.FC<CampaignsPageProps> = ({ onSelectCampaign, 
 
   useEffect(() => {
     fetchCampaigns();
-  }, []);
+  }, [activeNetworkCode, filterAdvertiser]);
+
+  const availableAdvertisers = isAdvertiserScoped && user?.advertiserName
+    ? [user.advertiserName]
+    : Array.from(
+        new Set([
+          ...partnerAdvertisers,
+          ...campaigns.map(c => c.advertiserName).filter(Boolean)
+        ])
+      ).sort();
 
   const filtered = campaigns.filter(c => {
     const matchesSearch = c.advertiserName.toLowerCase().includes(search.toLowerCase()) ||
-                          c.id.toLowerCase().includes(search.toLowerCase());
+                          c.id.toLowerCase().includes(search.toLowerCase()) ||
+                          (c.customName && c.customName.toLowerCase().includes(search.toLowerCase()));
     const matchesStatus = filterStatus === 'ALL' || c.status === filterStatus;
-    return matchesSearch && matchesStatus;
+    const matchesAdvertiser = isAdvertiserScoped
+      ? (c.advertiserName.toLowerCase() === user?.advertiserName?.toLowerCase())
+      : (filterAdvertiser === 'ALL' || c.advertiserName.toLowerCase() === filterAdvertiser.toLowerCase());
+    return matchesSearch && matchesStatus && matchesAdvertiser;
   });
 
   return (
@@ -70,35 +120,66 @@ export const CampaignsPage: React.FC<CampaignsPageProps> = ({ onSelectCampaign, 
         </div>
       </div>
 
+      {/* Scoped Advertiser Banner if user is assigned to a specific advertiser */}
+      {isAdvertiserScoped && (
+        <div className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-purple-50/90 border border-purple-200 text-purple-900 text-xs font-bold w-fit shadow-2xs">
+          <Layers className="w-4 h-4 text-purple-600 shrink-0" />
+          <span>Assigned Advertiser Account: {user?.advertiserName}</span>
+          <span className="px-2 py-0.5 rounded-md bg-purple-200/70 text-purple-800 text-[10px] font-bold uppercase ml-1">
+            Advertiser Scoped
+          </span>
+        </div>
+      )}
+
       {/* Filter and Search Bar */}
       <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col sm:flex-row gap-4 items-center justify-between">
         <div className="relative w-full sm:w-80">
           <Search className="w-4 h-4 absolute left-3.5 top-3 text-slate-400" />
           <input
             type="text"
-            placeholder="Search by advertiser or campaign ID..."
+            placeholder="Search by advertiser, campaign title, or ID..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="w-full pl-10 pr-4 py-2 text-xs rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600"
           />
         </div>
 
-        <div className="flex items-center gap-2 w-full sm:w-auto">
-          <Filter className="w-4 h-4 text-slate-400" />
-          <select
-            value={filterStatus}
-            onChange={(e) => setFilterStatus(e.target.value)}
-            className="px-3 py-2 text-xs rounded-xl border border-slate-200 bg-white font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-          >
-            <option value="ALL">All Statuses</option>
-            <option value="READY">READY</option>
-            <option value="VALIDATING">VALIDATING</option>
-            <option value="CREATING_ADVERTISER">CREATING ADVERTISER</option>
-            <option value="CREATING_ORDER">CREATING ORDER</option>
-            <option value="CREATING_LINE_ITEM">CREATING LINE ITEM</option>
-            <option value="PAUSED">PAUSED</option>
-            <option value="FAILED">FAILED</option>
-          </select>
+        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+          {/* Advertiser Filter */}
+          {!isAdvertiserScoped && (
+            <div className="flex items-center gap-1.5">
+              <Layers className="w-4 h-4 text-slate-400" />
+              <select
+                value={filterAdvertiser}
+                onChange={(e) => setFilterAdvertiser(e.target.value)}
+                className="px-3 py-2 text-xs rounded-xl border border-slate-200 bg-white font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+              >
+                <option value="ALL">All Advertisers</option>
+                {availableAdvertisers.map(adv => (
+                  <option key={adv} value={adv}>{adv}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* Status Filter */}
+          <div className="flex items-center gap-1.5">
+            <Filter className="w-4 h-4 text-slate-400" />
+            <select
+              value={filterStatus}
+              onChange={(e) => setFilterStatus(e.target.value)}
+              className="px-3 py-2 text-xs rounded-xl border border-slate-200 bg-white font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+            >
+              <option value="ALL">All Statuses</option>
+              <option value="READY">READY</option>
+              <option value="VALIDATING">VALIDATING</option>
+              <option value="CREATING_ADVERTISER">CREATING ADVERTISER</option>
+              <option value="CREATING_ORDER">CREATING ORDER</option>
+              <option value="CREATING_LINE_ITEM">CREATING LINE ITEM</option>
+              <option value="PAUSED">PAUSED</option>
+              <option value="FAILED">FAILED</option>
+            </select>
+          </div>
         </div>
       </div>
 
@@ -132,6 +213,12 @@ export const CampaignsPage: React.FC<CampaignsPageProps> = ({ onSelectCampaign, 
                     <td className="py-4 px-6 font-medium text-slate-900">
                       <div className="font-bold text-slate-900">{c.advertiserName}</div>
                       <div className="text-xs text-slate-400 font-mono">{c.id}</div>
+                      {c.createdBy && (
+                        <div className="text-[11px] text-indigo-600 font-medium mt-0.5 flex items-center gap-1">
+                          <span>Created by:</span>
+                          <span className="font-semibold">{c.createdBy}</span>
+                        </div>
+                      )}
                     </td>
                     <td className="py-4 px-6">
                       <div className="flex gap-1 flex-wrap">

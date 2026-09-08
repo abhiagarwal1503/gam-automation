@@ -2,10 +2,11 @@ import { GoogleAdManagerAuthService } from '../integrations/google-ad-manager/au
 import { webhookService } from '../services/webhookService';
 import { reportsController, forecastController } from '../controllers/reportsController';
 
-async function runSuite() {
-  console.log('========================================');
-  console.log('🧪 BLINK CMS AUTOMATION TEST SUITE');
-  console.log('========================================\n');
+describe('System Integration Suite', () => {
+  test('runs integration checks', async () => {
+    console.log('========================================');
+    console.log('🧪 BLINK CMS AUTOMATION TEST SUITE');
+    console.log('========================================\n');
 
   // Test 1: Service Account Authentication
   try {
@@ -78,9 +79,8 @@ async function runSuite() {
     console.log('❌ Test 4 Failed:', e.message);
   }
 
-  console.log('\n========================================');
-  console.log('🎉 ALL INTEGRATION TESTS PASSED (4/4)');
-  console.log('========================================');
-}
-
-runSuite();
+    console.log('\n========================================');
+    console.log('🎉 ALL INTEGRATION TESTS PASSED (4/4)');
+    console.log('========================================');
+  });
+});

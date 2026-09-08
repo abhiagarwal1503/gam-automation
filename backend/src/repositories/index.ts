@@ -12,7 +12,8 @@ import {
   ApiLog,
   AdSize,
   User,
-  UserRecord
+  UserRecord,
+  CmsPartner
 } from '../types';
 
 export const userRepo = {
@@ -27,13 +28,17 @@ export const userRepo = {
       salt: row.salt,
       role: row.role,
       avatar: row.avatar,
+      networkCode: row.network_code || undefined,
+      partnerName: row.partner_name || undefined,
+      advertiserId: row.advertiser_id || undefined,
+      advertiserName: row.advertiser_name || undefined,
       createdAt: row.created_at,
       updatedAt: row.updated_at
     };
   },
 
   findById(id: string): User | null {
-    const row: any = db.prepare('SELECT id, name, email, role, avatar, created_at, updated_at FROM users WHERE id = ?').get(id);
+    const row: any = db.prepare('SELECT id, name, email, role, avatar, network_code, partner_name, advertiser_id, advertiser_name, created_at, updated_at FROM users WHERE id = ?').get(id);
     if (!row) return null;
     return {
       id: row.id,
@@ -41,22 +46,40 @@ export const userRepo = {
       email: row.email,
       role: row.role,
       avatar: row.avatar,
+      networkCode: row.network_code || undefined,
+      partnerName: row.partner_name || undefined,
+      advertiserId: row.advertiser_id || undefined,
+      advertiserName: row.advertiser_name || undefined,
       createdAt: row.created_at,
       updatedAt: row.updated_at
     };
   },
 
-  create(data: { name: string; email: string; password: string; role?: User['role']; avatar?: string }): User {
+  create(data: {
+    name: string;
+    email: string;
+    password: string;
+    role?: User['role'];
+    avatar?: string;
+    networkCode?: string;
+    partnerName?: string;
+    advertiserId?: string;
+    advertiserName?: string;
+  }): User {
     const salt = crypto.randomBytes(16).toString('hex');
     const passwordHash = crypto.scryptSync(data.password, salt, 64).toString('hex');
     const now = new Date().toISOString();
     const id = `usr_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
     const role = data.role || 'trafficker';
     const avatar = data.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(data.name)}`;
+    const networkCode = data.networkCode || 'ALL';
+    const partnerName = data.partnerName || 'All Networks (Global Admin)';
+    const advertiserId = data.advertiserId || 'ALL';
+    const advertiserName = data.advertiserName || 'All Advertisers';
 
     db.prepare(`
-      INSERT INTO users (id, name, email, password_hash, salt, role, avatar, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO users (id, name, email, password_hash, salt, role, avatar, network_code, partner_name, advertiser_id, advertiser_name, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       id,
       data.name.trim(),
@@ -65,6 +88,10 @@ export const userRepo = {
       salt,
       role,
       avatar,
+      networkCode,
+      partnerName,
+      advertiserId,
+      advertiserName,
       now,
       now
     );
@@ -75,6 +102,10 @@ export const userRepo = {
       email: data.email.trim().toLowerCase(),
       role,
       avatar,
+      networkCode,
+      partnerName,
+      advertiserId,
+      advertiserName,
       createdAt: now,
       updatedAt: now
     };
@@ -86,29 +117,44 @@ export const userRepo = {
   },
 
   list(): User[] {
-    const rows: any[] = db.prepare('SELECT id, name, email, role, avatar, created_at, updated_at FROM users ORDER BY created_at DESC').all();
+    const rows: any[] = db.prepare('SELECT id, name, email, role, avatar, network_code, partner_name, advertiser_id, advertiser_name, created_at, updated_at FROM users ORDER BY created_at DESC').all();
     return rows.map(r => ({
       id: r.id,
       name: r.name,
       email: r.email,
       role: r.role,
       avatar: r.avatar,
+      networkCode: r.network_code || undefined,
+      partnerName: r.partner_name || undefined,
+      advertiserId: r.advertiser_id || undefined,
+      advertiserName: r.advertiser_name || undefined,
       createdAt: r.created_at,
       updatedAt: r.updated_at
     }));
+  },
+
+  delete(id: string): boolean {
+    const res = db.prepare('DELETE FROM users WHERE id = ?').run(id);
+    return res.changes > 0;
   }
 };
 
 
 export const advertiserRepo = {
-  findByName(name: string): Advertiser | null {
-    const row: any = db.prepare('SELECT * FROM advertisers WHERE LOWER(name) = LOWER(?)').get(name);
+  findByName(name: string, networkCode?: string): Advertiser | null {
+    let row: any;
+    if (networkCode && networkCode !== 'ALL') {
+      row = db.prepare('SELECT * FROM advertisers WHERE LOWER(name) = LOWER(?) AND network_code = ?').get(name, networkCode);
+    } else {
+      row = db.prepare('SELECT * FROM advertisers WHERE LOWER(name) = LOWER(?)').get(name);
+    }
     if (!row) return null;
     return {
       id: row.id,
       name: row.name,
       googleAdvertiserId: row.google_advertiser_id,
       status: row.status,
+      networkCode: row.network_code || undefined,
       createdAt: row.created_at,
       updatedAt: row.updated_at
     };
@@ -122,6 +168,7 @@ export const advertiserRepo = {
       name: row.name,
       googleAdvertiserId: row.google_advertiser_id,
       status: row.status,
+      networkCode: row.network_code || undefined,
       createdAt: row.created_at,
       updatedAt: row.updated_at
     };
@@ -129,13 +176,14 @@ export const advertiserRepo = {
 
   create(advertiser: Advertiser): Advertiser {
     db.prepare(`
-      INSERT INTO advertisers (id, name, google_advertiser_id, status, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?)
+      INSERT INTO advertisers (id, name, google_advertiser_id, status, network_code, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
     `).run(
       advertiser.id,
       advertiser.name,
       advertiser.googleAdvertiserId || null,
       advertiser.status,
+      advertiser.networkCode || null,
       advertiser.createdAt,
       advertiser.updatedAt
     );
@@ -147,13 +195,24 @@ export const advertiserRepo = {
       .run(googleAdvertiserId, new Date().toISOString(), id);
   },
 
-  list(): Advertiser[] {
-    const rows: any[] = db.prepare('SELECT * FROM advertisers ORDER BY created_at DESC').all();
+  updateNetworkCode(id: string, networkCode: string): void {
+    db.prepare('UPDATE advertisers SET network_code = ?, updated_at = ? WHERE id = ?')
+      .run(networkCode, new Date().toISOString(), id);
+  },
+
+  list(networkCode?: string): Advertiser[] {
+    let rows: any[];
+    if (networkCode && networkCode !== 'ALL') {
+      rows = db.prepare('SELECT * FROM advertisers WHERE network_code = ? ORDER BY created_at DESC').all(networkCode);
+    } else {
+      rows = db.prepare('SELECT * FROM advertisers ORDER BY created_at DESC').all();
+    }
     return rows.map(row => ({
       id: row.id,
       name: row.name,
       googleAdvertiserId: row.google_advertiser_id,
       status: row.status,
+      networkCode: row.network_code || undefined,
       createdAt: row.created_at,
       updatedAt: row.updated_at
     }));
@@ -177,6 +236,7 @@ export const adUnitRepo = {
       parentGoogleAdUnitId: row.parent_google_ad_unit_id,
       sizes: JSON.parse(row.sizes || '[]'),
       status: row.status,
+      networkCode: row.network_code,
       createdAt: row.created_at,
       updatedAt: row.updated_at
     };
@@ -193,6 +253,7 @@ export const adUnitRepo = {
       parentGoogleAdUnitId: row.parent_google_ad_unit_id,
       sizes: JSON.parse(row.sizes || '[]'),
       status: row.status,
+      networkCode: row.network_code,
       createdAt: row.created_at,
       updatedAt: row.updated_at
     };
@@ -200,8 +261,8 @@ export const adUnitRepo = {
 
   create(adUnit: AdUnit): AdUnit {
     db.prepare(`
-      INSERT INTO ad_units (id, name, code, google_ad_unit_id, parent_google_ad_unit_id, sizes, status, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO ad_units (id, name, code, google_ad_unit_id, parent_google_ad_unit_id, sizes, status, network_code, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       adUnit.id,
       adUnit.name,
@@ -210,6 +271,7 @@ export const adUnitRepo = {
       adUnit.parentGoogleAdUnitId || null,
       JSON.stringify(adUnit.sizes),
       adUnit.status,
+      adUnit.networkCode || null,
       adUnit.createdAt,
       adUnit.updatedAt
     );
@@ -221,8 +283,13 @@ export const adUnitRepo = {
       .run(googleAdUnitId, new Date().toISOString(), id);
   },
 
-  list(): AdUnit[] {
-    const rows: any[] = db.prepare('SELECT * FROM ad_units ORDER BY created_at DESC').all();
+  list(networkCode?: string): AdUnit[] {
+    let rows: any[];
+    if (networkCode && networkCode !== 'ALL') {
+      rows = db.prepare('SELECT * FROM ad_units WHERE network_code = ? OR network_code IS NULL ORDER BY created_at DESC').all(networkCode);
+    } else {
+      rows = db.prepare('SELECT * FROM ad_units ORDER BY created_at DESC').all();
+    }
     return rows.map(row => ({
       id: row.id,
       name: row.name,
@@ -231,6 +298,7 @@ export const adUnitRepo = {
       parentGoogleAdUnitId: row.parent_google_ad_unit_id,
       sizes: JSON.parse(row.sizes || '[]'),
       status: row.status,
+      networkCode: row.network_code,
       createdAt: row.created_at,
       updatedAt: row.updated_at
     }));
@@ -249,8 +317,8 @@ export const campaignRepo = {
         id, advertiser_id, advertiser_name, banner_url, target_url,
         start_date, end_date, sizes, position, status, current_step,
         error_message, google_error_details, suggested_action, is_dry_run,
-        network_code, gam_advertiser_id, custom_name, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        network_code, gam_advertiser_id, custom_name, created_by, creator_email, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       campaign.id,
       campaign.advertiserId || null,
@@ -270,6 +338,8 @@ export const campaignRepo = {
       (campaign as any).networkCode || null,
       (campaign as any).gamAdvertiserId || null,
       (campaign as any).customName || null,
+      (campaign as any).createdBy || null,
+      (campaign as any).creatorEmail || null,
       campaign.createdAt,
       campaign.updatedAt
     );
@@ -298,6 +368,10 @@ export const campaignRepo = {
       networkCode: row.network_code || null,
       gamAdvertiserId: row.gam_advertiser_id || null,
       customName: row.custom_name || null,
+      cmsSyncStatus: row.cms_sync_status || null,
+      cmsSyncedAt: row.cms_synced_at || null,
+      createdBy: row.created_by || null,
+      creatorEmail: row.creator_email || null,
       createdAt: row.created_at,
       updatedAt: row.updated_at
     } as any;
@@ -326,13 +400,33 @@ export const campaignRepo = {
     );
   },
 
+  updateCmsSync(id: string, status: string): void {
+    db.prepare(`
+      UPDATE campaigns
+      SET cms_sync_status = ?, cms_synced_at = ?, updated_at = ?
+      WHERE id = ?
+    `).run(status, new Date().toISOString(), new Date().toISOString(), id);
+  },
+
   updateAdvertiserId(id: string, advertiserId: string): void {
     db.prepare('UPDATE campaigns SET advertiser_id = ?, updated_at = ? WHERE id = ?')
       .run(advertiserId, new Date().toISOString(), id);
   },
 
-  list(): Campaign[] {
-    const rows: any[] = db.prepare('SELECT * FROM campaigns ORDER BY created_at DESC').all();
+  list(networkCode?: string, advertiserName?: string): Campaign[] {
+    let rows: any[];
+    const hasNet = networkCode && networkCode !== 'ALL';
+    const hasAdv = advertiserName && advertiserName !== 'ALL' && advertiserName !== 'All Advertisers';
+
+    if (hasNet && hasAdv) {
+      rows = db.prepare('SELECT * FROM campaigns WHERE network_code = ? AND LOWER(advertiser_name) = LOWER(?) ORDER BY created_at DESC').all(networkCode, advertiserName);
+    } else if (hasNet) {
+      rows = db.prepare('SELECT * FROM campaigns WHERE network_code = ? ORDER BY created_at DESC').all(networkCode);
+    } else if (hasAdv) {
+      rows = db.prepare('SELECT * FROM campaigns WHERE LOWER(advertiser_name) = LOWER(?) ORDER BY created_at DESC').all(advertiserName);
+    } else {
+      rows = db.prepare('SELECT * FROM campaigns ORDER BY created_at DESC').all();
+    }
     return rows.map(row => ({
       id: row.id,
       advertiserId: row.advertiser_id,
@@ -350,6 +444,11 @@ export const campaignRepo = {
       suggestedAction: row.suggested_action,
       isDryRun: Boolean(row.is_dry_run),
       networkCode: row.network_code || null,
+      customName: row.custom_name || null,
+      cmsSyncStatus: row.cms_sync_status || null,
+      cmsSyncedAt: row.cms_synced_at || null,
+      createdBy: row.created_by || null,
+      creatorEmail: row.creator_email || null,
       createdAt: row.created_at,
       updatedAt: row.updated_at
     }));
@@ -716,3 +815,137 @@ export const settingsRepo = {
       .run('system_config', JSON.stringify(settingsObj), new Date().toISOString());
   }
 };
+
+export const cmsPartnerRepo = {
+  list(): CmsPartner[] {
+    const rows: any[] = db.prepare('SELECT * FROM cms_partners ORDER BY created_at DESC').all();
+    return rows.map(r => ({
+      id: r.id,
+      name: r.name,
+      cmsType: r.cms_type,
+      endpoint: r.endpoint,
+      apiPath: r.api_path,
+      securityToken: r.security_token,
+      autoSyncCampaigns: Boolean(r.auto_sync_campaigns),
+      autoSyncAdUnits: Boolean(r.auto_sync_ad_units),
+      isActive: Boolean(r.is_active),
+      lastSyncAt: r.last_sync_at,
+      lastSyncStatus: r.last_sync_status,
+      lastSyncMessage: r.last_sync_message,
+      createdAt: r.created_at,
+      updatedAt: r.updated_at
+    }));
+  },
+
+  findById(id: string): CmsPartner | null {
+    const r: any = db.prepare('SELECT * FROM cms_partners WHERE id = ?').get(id);
+    if (!r) return null;
+    return {
+      id: r.id,
+      name: r.name,
+      cmsType: r.cms_type,
+      endpoint: r.endpoint,
+      apiPath: r.api_path,
+      securityToken: r.security_token,
+      autoSyncCampaigns: Boolean(r.auto_sync_campaigns),
+      autoSyncAdUnits: Boolean(r.auto_sync_ad_units),
+      isActive: Boolean(r.is_active),
+      lastSyncAt: r.last_sync_at,
+      lastSyncStatus: r.last_sync_status,
+      lastSyncMessage: r.last_sync_message,
+      createdAt: r.created_at,
+      updatedAt: r.updated_at
+    };
+  },
+
+  findActive(): CmsPartner[] {
+    const rows: any[] = db.prepare('SELECT * FROM cms_partners WHERE is_active = 1').all();
+    return rows.map(r => ({
+      id: r.id,
+      name: r.name,
+      cmsType: r.cms_type,
+      endpoint: r.endpoint,
+      apiPath: r.api_path,
+      securityToken: r.security_token,
+      autoSyncCampaigns: Boolean(r.auto_sync_campaigns),
+      autoSyncAdUnits: Boolean(r.auto_sync_ad_units),
+      isActive: Boolean(r.is_active),
+      lastSyncAt: r.last_sync_at,
+      lastSyncStatus: r.last_sync_status,
+      lastSyncMessage: r.last_sync_message,
+      createdAt: r.created_at,
+      updatedAt: r.updated_at
+    }));
+  },
+
+  create(partner: Partial<CmsPartner> & { name: string; endpoint: string; apiPath: string; securityToken: string }): CmsPartner {
+    const id = partner.id || `partner_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+    const now = new Date().toISOString();
+    const cmsType = partner.cmsType || 'HOCALWIRE';
+    const autoSyncCampaigns = partner.autoSyncCampaigns !== false ? 1 : 0;
+    const autoSyncAdUnits = partner.autoSyncAdUnits !== false ? 1 : 0;
+    const isActive = partner.isActive !== false ? 1 : 0;
+
+    db.prepare(`
+      INSERT INTO cms_partners (
+        id, name, cms_type, endpoint, api_path, security_token, auto_sync_campaigns, auto_sync_ad_units, is_active, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      id,
+      partner.name.trim(),
+      cmsType,
+      partner.endpoint.trim(),
+      partner.apiPath.trim(),
+      partner.securityToken.trim(),
+      autoSyncCampaigns,
+      autoSyncAdUnits,
+      isActive,
+      now,
+      now
+    );
+
+    return this.findById(id)!;
+  },
+
+  update(id: string, partner: Partial<CmsPartner>): CmsPartner | null {
+    const existing = this.findById(id);
+    if (!existing) return null;
+
+    const now = new Date().toISOString();
+    const name = partner.name !== undefined ? partner.name.trim() : existing.name;
+    const cmsType = partner.cmsType !== undefined ? partner.cmsType : existing.cmsType;
+    const endpoint = partner.endpoint !== undefined ? partner.endpoint.trim() : existing.endpoint;
+    const apiPath = partner.apiPath !== undefined ? partner.apiPath.trim() : existing.apiPath;
+    const securityToken = partner.securityToken !== undefined ? partner.securityToken.trim() : existing.securityToken;
+    const autoSyncCampaigns = partner.autoSyncCampaigns !== undefined ? (partner.autoSyncCampaigns ? 1 : 0) : (existing.autoSyncCampaigns ? 1 : 0);
+    const autoSyncAdUnits = partner.autoSyncAdUnits !== undefined ? (partner.autoSyncAdUnits ? 1 : 0) : (existing.autoSyncAdUnits ? 1 : 0);
+    const isActive = partner.isActive !== undefined ? (partner.isActive ? 1 : 0) : (existing.isActive ? 1 : 0);
+
+    db.prepare(`
+      UPDATE cms_partners SET
+        name = ?, cms_type = ?, endpoint = ?, api_path = ?, security_token = ?,
+        auto_sync_campaigns = ?, auto_sync_ad_units = ?, is_active = ?, updated_at = ?
+      WHERE id = ?
+    `).run(
+      name, cmsType, endpoint, apiPath, securityToken,
+      autoSyncCampaigns, autoSyncAdUnits, isActive, now, id
+    );
+
+    return this.findById(id);
+  },
+
+  updateSyncStatus(id: string, status: 'SUCCESS' | 'ERROR', message?: string): void {
+    const now = new Date().toISOString();
+    db.prepare(`
+      UPDATE cms_partners SET
+        last_sync_at = ?, last_sync_status = ?, last_sync_message = ?, updated_at = ?
+      WHERE id = ?
+    `).run(now, status, message || null, now, id);
+  },
+
+  delete(id: string): boolean {
+    const info = db.prepare('DELETE FROM cms_partners WHERE id = ?').run(id);
+    return info.changes > 0;
+  }
+};
+

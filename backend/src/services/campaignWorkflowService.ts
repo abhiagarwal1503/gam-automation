@@ -37,6 +37,7 @@ import { generateGPTTags } from '../utils/gptGenerator';
 import { validateBannerUrl, validateTargetUrl } from '../utils/assetValidator';
 import { config } from '../config';
 import { webhookService } from '../services/webhookService';
+import { CmsSyncService } from './cmsSyncService';
 
 export class CampaignWorkflowService {
   /**
@@ -64,6 +65,8 @@ export class CampaignWorkflowService {
       status: 'DRAFT',
       currentStep: 'INITIALIZED',
       isDryRun: Boolean(input.isDryRun),
+      createdBy: input.createdBy || undefined,
+      creatorEmail: input.creatorEmail || undefined,
       createdAt: now,
       updatedAt: now
     };
@@ -725,6 +728,15 @@ export class CampaignWorkflowService {
         }).catch(err => console.warn('Webhook notification error:', err));
       } catch (notifyErr) {
         console.warn('Webhook notification error:', notifyErr);
+      }
+
+      // Automatically push GPT tags to active CMS partners
+      try {
+        CmsSyncService.syncCampaign(campaignId).catch(err => {
+          console.warn('CMS auto-sync background error:', err);
+        });
+      } catch (cmsErr) {
+        console.warn('Failed to trigger CMS sync:', cmsErr);
       }
 
       return {

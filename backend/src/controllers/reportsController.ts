@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { campaignRepo, orderRepo, lineItemRepo, creativeRepo, advertiserRepo, adUnitRepo } from '../repositories';
+import { getAuthUser } from './index';
 
 // Real network benchmarks & advertisers fallback dataset
 const NETWORK_BENCHMARKS: Record<string, { networkName: string; defaultSlots: { slot: string; size: string; booked: number; delivered: number; clicks: number; ctr: string; cpm: number }[] }> = {
@@ -53,6 +54,14 @@ export const reportsController = {
    */
   async getCampaignReport(req: Request, res: Response) {
     try {
+      const authUser = getAuthUser(req);
+      if (authUser && authUser.role !== 'admin') {
+        return res.status(403).json({
+          success: false,
+          error: 'Access Denied: Reports & Analytics are restricted to Administrators only.'
+        });
+      }
+
       const paramId = req.params.campaignId;
       const campaignId = Array.isArray(paramId) ? paramId[0] : (paramId ? String(paramId) : undefined);
       const networkCode = req.query.networkCode ? String(req.query.networkCode) : 'all';
@@ -203,6 +212,14 @@ export const forecastController = {
    */
   async checkAvailability(req: Request, res: Response) {
     try {
+      const authUser = getAuthUser(req);
+      if (authUser && authUser.role !== 'admin') {
+        return res.status(403).json({
+          success: false,
+          error: 'Access Denied: Inventory Forecasting is restricted to Administrators only.'
+        });
+      }
+
       const { networkCode, adUnitCode, sizes, startDate, endDate, lineItemType, priority } = req.body;
 
       if (!startDate || !endDate) {

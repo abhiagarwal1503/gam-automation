@@ -7,7 +7,11 @@ import {
   ApiLog,
   SystemSettings,
   AdSize,
-  User
+  User,
+  CmsPartner,
+  CmsSyncResult,
+  CmsElement,
+  PushDfpResult
 } from '../types';
 
 const API_BASE = (import.meta.env.VITE_API_URL ? `${import.meta.env.VITE_API_URL}/api` : '/api').replace(/\/+api$/, '/api');
@@ -23,8 +27,11 @@ axios.interceptors.request.use((config) => {
 
 export const api = {
   // Campaigns
-  async getCampaigns(): Promise<Campaign[]> {
-    const res = await axios.get(`${API_BASE}/campaigns`);
+  async getCampaigns(networkCode?: string, advertiser?: string): Promise<Campaign[]> {
+    const params: any = {};
+    if (networkCode && networkCode !== 'ALL') params.networkCode = networkCode;
+    if (advertiser && advertiser !== 'ALL' && advertiser !== 'All Advertisers') params.advertiser = advertiser;
+    const res = await axios.get(`${API_BASE}/campaigns`, { params: Object.keys(params).length > 0 ? params : undefined });
     return res.data.data;
   },
 
@@ -45,6 +52,8 @@ export const api = {
     sizes: AdSize[];
     position?: string;
     isDryRun?: boolean;
+    createdBy?: string;
+    creatorEmail?: string;
   }): Promise<{ campaignId: string; status: string; data: Campaign }> {
     const res = await axios.post(`${API_BASE}/campaigns`, data);
     return res.data;
@@ -84,8 +93,9 @@ export const api = {
   },
 
   // Ad Units
-  async getAdUnits(): Promise<AdUnit[]> {
-    const res = await axios.get(`${API_BASE}/ad-units`);
+  async getAdUnits(networkCode?: string): Promise<AdUnit[]> {
+    const params = networkCode && networkCode !== 'ALL' ? { networkCode } : undefined;
+    const res = await axios.get(`${API_BASE}/ad-units`, { params });
     return res.data.data;
   },
 
@@ -94,6 +104,7 @@ export const api = {
     code: string;
     sizes: AdSize[];
     parentGoogleAdUnitId?: string;
+    networkCode?: string;
   }): Promise<AdUnit> {
     const res = await axios.post(`${API_BASE}/ad-units`, data);
     return res.data.data;
@@ -105,12 +116,13 @@ export const api = {
   },
 
   // Advertisers (local DB)
-  async getAdvertisers(): Promise<Advertiser[]> {
-    const res = await axios.get(`${API_BASE}/advertisers`);
+  async getAdvertisers(networkCode?: string): Promise<Advertiser[]> {
+    const params = networkCode ? { networkCode } : undefined;
+    const res = await axios.get(`${API_BASE}/advertisers`, { params });
     return res.data.data;
   },
 
-  async createAdvertiser(data: { name: string }): Promise<Advertiser> {
+  async createAdvertiser(data: { name: string; networkCode?: string; googleAdvertiserId?: string }): Promise<Advertiser> {
     const res = await axios.post(`${API_BASE}/advertisers`, data);
     return res.data.data;
   },
@@ -197,7 +209,16 @@ export const api = {
   },
 
   // User Auth & Session
-  async register(data: { name: string; email: string; password: string; role?: User['role'] }): Promise<{ user: User; token: string }> {
+  async register(data: {
+    name: string;
+    email: string;
+    password: string;
+    role?: User['role'];
+    networkCode?: string;
+    partnerName?: string;
+    advertiserId?: string;
+    advertiserName?: string;
+  }): Promise<{ user: User; token: string }> {
     const res = await axios.post(`${API_BASE}/auth/register`, data);
     return res.data.data;
   },
@@ -215,6 +236,11 @@ export const api = {
   async getUsers(): Promise<User[]> {
     const res = await axios.get(`${API_BASE}/auth/users`);
     return res.data.data;
+  },
+
+  async deleteUser(id: string): Promise<{ success: boolean; message: string }> {
+    const res = await axios.delete(`${API_BASE}/auth/users/${id}`);
+    return res.data;
   },
 
   // Reports & Performance
@@ -255,6 +281,68 @@ export const api = {
   async getAuthUrl(): Promise<string> {
     const res = await axios.get(`${API_BASE}/auth/google/url`);
     return res.data.url;
+  },
+
+  // CMS & Partner Webhook Sync
+  async getCmsPartners(): Promise<CmsPartner[]> {
+    const res = await axios.get(`${API_BASE}/cms/partners`);
+    return res.data.data;
+  },
+
+  async createCmsPartner(data: Partial<CmsPartner>): Promise<CmsPartner> {
+    const res = await axios.post(`${API_BASE}/cms/partners`, data);
+    return res.data.data;
+  },
+
+  async updateCmsPartner(id: string, data: Partial<CmsPartner>): Promise<CmsPartner> {
+    const res = await axios.put(`${API_BASE}/cms/partners/${id}`, data);
+    return res.data.data;
+  },
+
+  async deleteCmsPartner(id: string): Promise<{ success: boolean; message: string }> {
+    const res = await axios.delete(`${API_BASE}/cms/partners/${id}`);
+    return res.data;
+  },
+
+  async testCmsPartner(data: {
+    endpoint?: string;
+    apiPath?: string;
+    securityToken?: string;
+    partnerId?: string;
+    name?: string;
+  }): Promise<{ success: boolean; data: CmsSyncResult }> {
+    const res = await axios.post(`${API_BASE}/cms/test`, data);
+    return res.data;
+  },
+
+  async syncCampaignToCms(campaignId: string, partnerId?: string): Promise<{ success: boolean; data: CmsSyncResult[] }> {
+    const res = await axios.post(`${API_BASE}/cms/sync/campaign/${campaignId}`, { partnerId });
+    return res.data;
+  },
+
+  async syncAdUnitsToCms(data?: { adUnitIds?: string[]; partnerId?: string }): Promise<{ success: boolean; data: CmsSyncResult[] }> {
+    const res = await axios.post(`${API_BASE}/cms/sync/ad-units`, data || {});
+    return res.data;
+  },
+
+  async fetchPartnerElements(params?: { partnerId?: string; url?: string }): Promise<{
+    partner: CmsPartner | null;
+    targetUrl: string;
+    elements: CmsElement[];
+    source: string;
+  }> {
+    const res = await axios.post(`${API_BASE}/cms/fetch-elements`, params || {});
+    return res.data.data;
+  },
+
+  async pushElementDfp(params: {
+    partnerId?: string;
+    element: Partial<CmsElement> & { divId: string; slotCode: string; width: number; height: number };
+    networkCode?: string;
+    customSnippet?: string;
+  }): Promise<PushDfpResult> {
+    const res = await axios.post(`${API_BASE}/cms/push-element-dfp`, params);
+    return res.data.data;
   }
 };
 

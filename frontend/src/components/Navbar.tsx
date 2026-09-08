@@ -18,9 +18,28 @@ import {
   BarChart3,
   Menu,
   X,
-  Globe
+  Globe,
+  Building2,
+  Shield,
+  Check,
+  Search
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+
+const GAM_NETWORKS = [
+  { name: 'Blinkcorp Technologies Private Limited', code: '22068249324' },
+  { name: 'Dhanam Publications Pvt.', code: '86902771' },
+  { name: 'Gaon Connection', code: '22590922850' },
+  { name: 'Hyderabad Media House L.', code: '310443190' },
+  { name: 'Illustrated Daily News', code: '22674196146' },
+  { name: 'new powergame dot com', code: '22827981500' },
+  { name: 'News Track', code: '22212039110' },
+  { name: 'pappu farishta', code: '22671723195' },
+  { name: 'Pratahkal Multimedia', code: '23345489262' },
+  { name: 'Shreya Broadcasting Pvt L.', code: '83023919' },
+  { name: 'The Federal', code: '22665183713' },
+  { name: 'Vartha Bharati', code: '20030162679' }
+];
 
 interface NavbarProps {
   activeTab: string;
@@ -35,13 +54,21 @@ export const Navbar: React.FC<NavbarProps> = ({
   isGamConnected,
   onOpenAuthModal
 }) => {
-  const { user, logout, isAuthenticated } = useAuth();
+  const { user, logout, isAuthenticated, isAdmin, isPartnerScoped, activeNetworkCode, setActiveNetworkCode } = useAuth();
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
   const [toolsDropdownOpen, setToolsDropdownOpen] = useState(false);
+  const [partnerDropdownOpen, setPartnerDropdownOpen] = useState(false);
+  const [partnerSearch, setPartnerSearch] = useState('');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const toolsRef = useRef<HTMLDivElement>(null);
   const userRef = useRef<HTMLDivElement>(null);
+  const partnerRef = useRef<HTMLDivElement>(null);
+
+  const filteredNetworks = GAM_NETWORKS.filter(net =>
+    net.name.toLowerCase().includes(partnerSearch.toLowerCase()) ||
+    net.code.includes(partnerSearch)
+  );
 
   // Close dropdowns on click outside
   useEffect(() => {
@@ -52,54 +79,62 @@ export const Navbar: React.FC<NavbarProps> = ({
       if (userRef.current && !userRef.current.contains(e.target as Node)) {
         setUserDropdownOpen(false);
       }
+      if (partnerRef.current && !partnerRef.current.contains(e.target as Node)) {
+        setPartnerDropdownOpen(false);
+      }
     }
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Primary navigation tabs
+  // Primary navigation tabs (Dashboard and Campaigns only)
   const primaryNav = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'campaigns', label: 'Campaigns', icon: Megaphone },
-    { id: 'reports', label: 'Reports', icon: TrendingUp },
-    { id: 'forecaster', label: 'Forecaster', icon: Zap },
   ];
 
-  // Secondary tools in Clean Dropdown
-  const toolsMenu = [
-    { id: 'ad-units', label: 'Ad Units Inventory', desc: 'Manage GAM slots & sizes', icon: Grid },
-    { id: 'advertisers', label: 'Advertisers Directory', desc: 'Sync & map GAM companies', icon: Layers },
-    { id: 'gpt-generator', label: 'GPT Tag Generator', desc: 'Window Infinite GPT syntax', icon: Code },
-    { id: 'logs', label: 'GAM API Logs', desc: 'Audit live SOAP operations', icon: History },
-    { id: 'settings', label: 'Network Settings', desc: 'Credentials & API configs', icon: Settings },
+  // Secondary tools in Inventory & Tools module
+  // Reports, Forecaster, GAM API Logs, and Settings are admin-only
+  const allToolsMenu = [
+    { id: 'ad-units', label: 'Ad Units Inventory', desc: 'Manage GAM slots & sizes', icon: Grid, adminOnly: false },
+    { id: 'advertisers', label: 'Advertisers Directory', desc: 'Sync & map GAM companies', icon: Layers, adminOnly: false },
+    { id: 'gpt-generator', label: 'GPT Tag Generator', desc: 'Window Infinite GPT syntax', icon: Code, adminOnly: true },
+    { id: 'reports', label: 'Performance Reports', desc: 'Delivery & revenue metrics', icon: TrendingUp, adminOnly: true },
+    { id: 'forecaster', label: 'Inventory Forecaster', desc: 'Traffic & availability predictions', icon: Zap, adminOnly: true },
+    { id: 'logs', label: 'GAM API Logs', desc: 'Audit live SOAP operations', icon: History, adminOnly: true },
+    { id: 'settings', label: 'Network Settings', desc: 'Credentials & API configs', icon: Settings, adminOnly: true },
   ];
+
+  const toolsMenu = allToolsMenu.filter(t => !t.adminOnly || isAdmin);
 
   const isToolActive = toolsMenu.some(t => t.id === activeTab);
 
   return (
     <header className="bg-white/95 backdrop-blur-md border-b border-slate-200/90 sticky top-0 z-40 shadow-xs">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-16 gap-4">
+        <div className="flex items-center justify-between h-16 gap-3">
           
           {/* Brand Logo */}
           <div
-            className="flex items-center gap-3 cursor-pointer group shrink-0"
+            className="flex items-center gap-2.5 cursor-pointer group shrink-0"
             onClick={() => {
               setActiveTab('dashboard');
               setMobileMenuOpen(false);
             }}
           >
             <div className="relative">
-              <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-blue-600 via-indigo-600 to-violet-600 flex items-center justify-center text-white shadow-md shadow-blue-500/25 group-hover:scale-105 transition-transform font-black text-lg">
-                ⚡
+              <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-blue-600 via-indigo-600 to-violet-600 flex items-center justify-center text-white shadow-md shadow-blue-500/20 group-hover:scale-105 transition-transform font-bold">
+                <Zap className="w-5 h-5 fill-white text-white" />
               </div>
-              <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-emerald-500 border-2 border-white" />
+              <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-500 border-2 border-white" />
             </div>
             <div>
-              <div className="font-extrabold text-lg text-slate-900 tracking-tight leading-none flex items-center gap-2">
-                Blink CMS
+              <div className="font-extrabold text-base sm:text-lg text-slate-900 tracking-tight leading-none flex items-center gap-1">
+                Blink<span className="text-blue-600 font-black">CMS</span>
               </div>
-              <span className="text-[10px] text-slate-400 font-medium hidden sm:inline-block mt-0.5">Google Ad Manager</span>
+              <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider hidden sm:inline-block mt-0.5">
+                Google Ad Manager
+              </span>
             </div>
           </div>
 
@@ -180,36 +215,133 @@ export const Navbar: React.FC<NavbarProps> = ({
           </nav>
 
           {/* Right Action: Create Campaign CTA + Live Pill + User Profile */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-2.5">
             {/* New Campaign Highlight CTA */}
             <button
               onClick={() => setActiveTab('create')}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-500 hover:from-blue-700 hover:to-indigo-700 text-white text-xs font-bold shadow-md shadow-blue-500/25 transition transform hover:-translate-y-0.5 active:translate-y-0 shrink-0"
+              className={`flex items-center gap-1.5 px-3 sm:px-3.5 py-2 rounded-xl text-xs font-bold transition-all shadow-sm shrink-0 ${
+                activeTab === 'create'
+                  ? 'bg-blue-700 text-white ring-2 ring-blue-500/30 shadow-blue-500/20'
+                  : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-blue-500/20 hover:scale-[1.02] active:scale-[0.98]'
+              }`}
             >
-              <PlusCircle className="w-4 h-4" />
+              <PlusCircle className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">New Campaign</span>
             </button>
 
-            {/* GAM Connection Pill */}
-            <div className="hidden lg:flex items-center gap-2 px-2.5 py-1 rounded-full bg-slate-100/90 border border-slate-200/80">
-              <div className={`w-2 h-2 rounded-full ${isGamConnected ? 'bg-emerald-500 animate-pulse' : 'bg-amber-400'}`} />
-              <span className="text-[11px] text-slate-600 font-bold">
-                {isGamConnected ? 'GAM Live' : 'SOAP Ready'}
-              </span>
-            </div>
+            {/* Partner / Network Scope Switcher or Locked Badge */}
+            {isAuthenticated && user && (
+              isAdmin ? (
+                <div className="relative shrink-0" ref={partnerRef}>
+                  <button
+                    type="button"
+                    onClick={() => setPartnerDropdownOpen(!partnerDropdownOpen)}
+                    className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl border border-indigo-200 bg-indigo-50/80 hover:bg-indigo-100 text-indigo-950 text-xs font-bold transition shadow-2xs"
+                    title="Switch active partner network filter"
+                  >
+                    <Building2 className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                    <span className="truncate max-w-[90px] sm:max-w-[130px] lg:max-w-[160px]">
+                      {activeNetworkCode === 'ALL'
+                        ? 'All Networks'
+                        : (GAM_NETWORKS.find(n => n.code === activeNetworkCode)?.name || activeNetworkCode)}
+                    </span>
+                    <ChevronDown className={`w-3 h-3 text-indigo-500 transition-transform ${partnerDropdownOpen ? 'rotate-180' : ''}`} />
+                  </button>
+
+                  {partnerDropdownOpen && (
+                    <div className="absolute right-0 mt-2 w-80 bg-white border border-slate-200 rounded-2xl shadow-xl py-2 z-50 animate-fade-in divide-y divide-slate-100">
+                      <div className="px-3.5 py-2">
+                        <div className="flex items-center justify-between text-[10px] font-extrabold uppercase tracking-wider text-slate-400 mb-2">
+                          <span>Filter GAM Network</span>
+                          <span className="text-indigo-700 bg-indigo-50 border border-indigo-100 px-1.5 py-0.5 rounded font-bold">Admin Filter</span>
+                        </div>
+                        <div className="relative">
+                          <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-slate-400" />
+                          <input
+                            type="text"
+                            placeholder="Search partner or network code..."
+                            value={partnerSearch}
+                            onChange={(e) => setPartnerSearch(e.target.value)}
+                            onClick={(e) => e.stopPropagation()}
+                            className="w-full pl-8 pr-3 py-1.5 text-xs rounded-lg border border-slate-200 bg-slate-50 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-indigo-500/20"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="p-1 max-h-64 overflow-y-auto space-y-0.5">
+                        {(!partnerSearch || 'all networks'.includes(partnerSearch.toLowerCase())) && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setActiveNetworkCode('ALL');
+                              setPartnerDropdownOpen(false);
+                            }}
+                            className={`w-full text-left px-3 py-2 rounded-xl text-xs flex items-center justify-between transition ${
+                              activeNetworkCode === 'ALL' ? 'bg-indigo-50 text-indigo-800 font-bold' : 'hover:bg-slate-50 text-slate-700'
+                            }`}
+                          >
+                            <div>
+                              <div className="font-bold flex items-center gap-1.5 text-slate-900">
+                                <Globe className="w-3.5 h-3.5 text-indigo-600" />
+                                All Networks &amp; Partners
+                              </div>
+                              <div className="text-[10px] text-slate-400 font-normal pl-5">Global unrestricted access</div>
+                            </div>
+                            {activeNetworkCode === 'ALL' && <Check className="w-4 h-4 text-indigo-600 shrink-0" />}
+                          </button>
+                        )}
+
+                        {filteredNetworks.map(net => (
+                          <button
+                            key={net.code}
+                            type="button"
+                            onClick={() => {
+                              setActiveNetworkCode(net.code);
+                              setPartnerDropdownOpen(false);
+                            }}
+                            className={`w-full text-left px-3 py-2 rounded-xl text-xs flex items-center justify-between transition ${
+                              activeNetworkCode === net.code ? 'bg-indigo-50 text-indigo-800 font-bold' : 'hover:bg-slate-50 text-slate-700'
+                            }`}
+                          >
+                            <div className="truncate pr-2">
+                              <div className="truncate font-semibold text-slate-800">{net.name}</div>
+                              <div className="text-[10px] font-mono text-slate-400">Code: {net.code}</div>
+                            </div>
+                            {activeNetworkCode === net.code && <Check className="w-4 h-4 text-indigo-600 shrink-0" />}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : isPartnerScoped ? (
+                <div
+                  className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl border border-blue-200 bg-blue-50/80 text-blue-900 text-xs font-bold shrink-0 shadow-2xs"
+                  title={`Scoped to ${user.partnerName} (${user.networkCode})`}
+                >
+                  <Building2 className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                  <span className="truncate max-w-[90px] sm:max-w-[140px] lg:max-w-[180px]">
+                    {user.partnerName || 'Assigned Partner'}
+                  </span>
+                  <span className="text-[10px] font-mono text-blue-700 font-bold hidden lg:inline">
+                    ({user.networkCode})
+                  </span>
+                </div>
+              ) : null
+            )}
 
             {/* User Profile Dropdown */}
             {isAuthenticated && user ? (
-              <div className="relative" ref={userRef}>
+              <div className="relative shrink-0" ref={userRef}>
                 <button
                   type="button"
                   onClick={() => setUserDropdownOpen(!userDropdownOpen)}
-                  className="flex items-center gap-2 p-1.5 pr-2.5 rounded-xl hover:bg-slate-100 transition border border-slate-200 bg-white shadow-2xs"
+                  className="flex items-center gap-2 p-1.5 pr-2 rounded-xl hover:bg-slate-100 transition border border-slate-200 bg-white shadow-2xs"
                 >
                   {user.avatar ? (
                     <img src={user.avatar} alt={user.name} className="w-7 h-7 rounded-lg object-cover" />
                   ) : (
-                    <div className="w-7 h-7 rounded-lg bg-indigo-600 text-white flex items-center justify-center font-bold text-xs">
+                    <div className="w-7 h-7 rounded-lg bg-indigo-600 text-white flex items-center justify-center font-bold text-xs shadow-xs">
                       {user.name.charAt(0)}
                     </div>
                   )}
@@ -221,26 +353,53 @@ export const Navbar: React.FC<NavbarProps> = ({
                 </button>
 
                 {userDropdownOpen && (
-                  <div className="absolute right-0 mt-2 w-56 bg-white border border-slate-200 rounded-2xl shadow-xl py-2 z-50 animate-fade-in">
-                    <div className="px-4 py-2 border-b border-slate-100">
+                  <div className="absolute right-0 mt-2 w-64 bg-white border border-slate-200 rounded-2xl shadow-xl py-2 z-50 animate-fade-in divide-y divide-slate-100">
+                    <div className="px-4 py-3">
                       <div className="text-xs font-bold text-slate-900">{user.name}</div>
-                      <div className="text-[11px] text-slate-400 truncate">{user.email}</div>
-                      <span className="inline-block mt-1 px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 text-[10px] font-bold uppercase tracking-wider">
-                        {user.role}
-                      </span>
+                      <div className="text-[11px] text-slate-400 truncate mt-0.5">{user.email}</div>
+                      <div className="flex items-center gap-1.5 mt-2">
+                        <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider ${
+                          user.role === 'admin'
+                            ? 'bg-purple-100 text-purple-800 border border-purple-200'
+                            : 'bg-blue-100 text-blue-800 border border-blue-200'
+                        }`}>
+                          {user.role}
+                        </span>
+                        <span className="text-[10px] text-slate-500 truncate max-w-[130px]">
+                          {user.networkCode === 'ALL' || !user.networkCode ? 'Global Scope' : (user.partnerName || user.networkCode)}
+                        </span>
+                      </div>
                     </div>
 
-                    <button
-                      type="button"
-                      onClick={() => {
-                        logout();
-                        setUserDropdownOpen(false);
-                      }}
-                      className="w-full text-left px-4 py-2.5 text-xs font-semibold text-rose-600 hover:bg-rose-50 flex items-center gap-2 transition"
-                    >
-                      <LogOut className="w-3.5 h-3.5" />
-                      Sign Out
-                    </button>
+                    {isAdmin && (
+                      <div className="p-1 space-y-0.5">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setActiveTab('settings');
+                            setUserDropdownOpen(false);
+                          }}
+                          className="w-full text-left px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-xl flex items-center gap-2 transition"
+                        >
+                          <Settings className="w-3.5 h-3.5 text-slate-400" />
+                          <span>Settings &amp; Users</span>
+                        </button>
+                      </div>
+                    )}
+
+                    <div className="p-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          logout();
+                          setUserDropdownOpen(false);
+                        }}
+                        className="w-full text-left px-3 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50 rounded-xl flex items-center gap-2 transition"
+                      >
+                        <LogOut className="w-3.5 h-3.5" />
+                        <span>Sign Out</span>
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
@@ -268,8 +427,56 @@ export const Navbar: React.FC<NavbarProps> = ({
 
         {/* Mobile Dropdown Menu */}
         {mobileMenuOpen && (
-          <div className="md:hidden py-4 border-t border-slate-100 space-y-2 animate-fade-in">
-            <div className="grid grid-cols-2 gap-1 pb-3 border-b border-slate-100">
+          <div className="md:hidden py-4 border-t border-slate-100 space-y-3 animate-fade-in">
+            {/* User Account Info on Mobile */}
+            {isAuthenticated && user && (
+              <div className="p-3 bg-slate-50 border border-slate-200/80 rounded-2xl flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-bold text-xs shadow-xs">
+                    {user.name.charAt(0)}
+                  </div>
+                  <div>
+                    <div className="text-xs font-bold text-slate-900">{user.name}</div>
+                    <div className="text-[10px] text-slate-500 font-mono">{user.email}</div>
+                  </div>
+                </div>
+                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md uppercase ${
+                  user.role === 'admin' ? 'bg-purple-100 text-purple-800' : 'bg-blue-100 text-blue-800'
+                }`}>
+                  {user.role}
+                </span>
+              </div>
+            )}
+
+            {/* Mobile Admin Partner Switcher */}
+            {isAuthenticated && isAdmin && (
+              <div className="p-3 bg-indigo-50/70 border border-indigo-200/80 rounded-2xl space-y-1.5">
+                <div className="flex items-center justify-between text-[11px] font-bold text-indigo-900">
+                  <span className="flex items-center gap-1.5">
+                    <Building2 className="w-3.5 h-3.5 text-indigo-600" />
+                    Active GAM Network:
+                  </span>
+                  <span className="font-mono text-[10px] text-indigo-700">
+                    {activeNetworkCode === 'ALL' ? 'ALL' : activeNetworkCode}
+                  </span>
+                </div>
+                <select
+                  value={activeNetworkCode}
+                  onChange={(e) => setActiveNetworkCode(e.target.value)}
+                  className="w-full text-xs font-semibold bg-white border border-indigo-200 rounded-xl px-2.5 py-1.5 text-slate-800"
+                >
+                  <option value="ALL">🌐 All Networks (Global Unrestricted)</option>
+                  {GAM_NETWORKS.map(net => (
+                    <option key={net.code} value={net.code}>
+                      {net.name} ({net.code})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {/* Primary Nav Tabs */}
+            <div className="grid grid-cols-2 gap-1.5 pb-2 border-b border-slate-100">
               {primaryNav.map(item => {
                 const Icon = item.icon;
                 const isActive = activeTab === item.id;
@@ -280,9 +487,9 @@ export const Navbar: React.FC<NavbarProps> = ({
                       setActiveTab(item.id);
                       setMobileMenuOpen(false);
                     }}
-                    className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold transition-all ${
+                    className={`flex items-center gap-2 px-3 py-2.5 rounded-xl text-xs font-bold transition-all ${
                       isActive
-                        ? 'bg-blue-600 text-white'
+                        ? 'bg-blue-600 text-white shadow-sm shadow-blue-500/20'
                         : 'text-slate-700 hover:bg-slate-100'
                     }`}
                   >
@@ -293,8 +500,9 @@ export const Navbar: React.FC<NavbarProps> = ({
               })}
             </div>
 
-            <div className="pt-2">
-              <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-3 pb-1">
+            {/* Tools Menu */}
+            <div>
+              <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-2 pb-1.5">
                 Tools & Settings
               </div>
               <div className="grid grid-cols-1 gap-1">
@@ -308,17 +516,34 @@ export const Navbar: React.FC<NavbarProps> = ({
                         setActiveTab(tool.id);
                         setMobileMenuOpen(false);
                       }}
-                      className={`flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-left ${
+                      className={`flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-left ${
                         isActive ? 'bg-blue-50 text-blue-700 font-bold' : 'text-slate-600 hover:bg-slate-50'
                       }`}
                     >
-                      <Icon className="w-4 h-4" />
+                      <Icon className="w-4 h-4 text-slate-400" />
                       <span>{tool.label}</span>
                     </button>
                   );
                 })}
               </div>
             </div>
+
+            {/* Sign Out on Mobile */}
+            {isAuthenticated && (
+              <div className="pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => {
+                    logout();
+                    setMobileMenuOpen(false);
+                  }}
+                  className="w-full text-left px-3 py-2 rounded-xl text-xs font-semibold text-rose-600 hover:bg-rose-50 flex items-center gap-2 transition"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                  Sign Out
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>

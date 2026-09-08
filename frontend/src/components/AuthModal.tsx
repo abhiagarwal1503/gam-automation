@@ -23,17 +23,13 @@ interface AuthModalProps {
 
 export const AuthModal: React.FC<AuthModalProps> = ({
   isOpen,
-  onClose,
-  defaultTab = 'login'
+  onClose
 }) => {
-  const { login, register } = useAuth();
-  const [tab, setTab] = useState<'login' | 'register'>(defaultTab);
+  const { login } = useAuth();
 
   // Form states
-  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [role, setRole] = useState<'admin' | 'trafficker' | 'publisher' | 'adops'>('trafficker');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -46,23 +42,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     setLoading(true);
 
     try {
-      if (tab === 'login') {
-        await login({ email, password });
-      } else {
-        await register({ name, email, password, role });
-      }
+      await login({ email, password });
       if (onClose) onClose();
     } catch (err: any) {
       setError(err?.response?.data?.error || err.message || 'Authentication failed. Please try again.');
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleFillDemo = (demoEmail: string, demoPass: string) => {
-    setEmail(demoEmail);
-    setPassword(demoPass);
-    setTab('login');
   };
 
   return (
@@ -83,35 +69,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 Google Ad Manager <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 font-semibold">2.0</span>
               </h2>
               <p className="text-xs text-slate-500 mt-0.5">
-                {tab === 'login' ? 'Sign in to access live ad placement engine' : 'Create an account for automated ad trafficking'}
+                Sign in to access your assigned partner workspace
               </p>
             </div>
-          </div>
-
-          {/* Tab Switcher */}
-          <div className="grid grid-cols-2 p-1 bg-slate-100/80 rounded-xl text-xs font-semibold">
-            <button
-              type="button"
-              onClick={() => { setTab('login'); setError(null); }}
-              className={`py-2 rounded-lg transition-all ${
-                tab === 'login'
-                  ? 'bg-white text-slate-900 shadow-sm'
-                  : 'text-slate-500 hover:text-slate-800'
-              }`}
-            >
-              Sign In
-            </button>
-            <button
-              type="button"
-              onClick={() => { setTab('register'); setError(null); }}
-              className={`py-2 rounded-lg transition-all ${
-                tab === 'register'
-                  ? 'bg-white text-slate-900 shadow-sm'
-                  : 'text-slate-500 hover:text-slate-800'
-              }`}
-            >
-              Register New User
-            </button>
           </div>
 
           {error && (
@@ -123,42 +83,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
           {/* Form */}
           <form onSubmit={handleSubmit} className="space-y-4">
-            {tab === 'register' && (
-              <>
-                <div className="space-y-1.5">
-                  <label className="block text-xs font-semibold text-slate-700">Full Name</label>
-                  <div className="relative">
-                    <User className="w-4 h-4 absolute left-3.5 top-3 text-slate-400" />
-                    <input
-                      type="text"
-                      required
-                      placeholder="e.g. Alex Sharma"
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
-                      className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition"
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="block text-xs font-semibold text-slate-700">Role / Position</label>
-                  <div className="relative">
-                    <Shield className="w-4 h-4 absolute left-3.5 top-3 text-slate-400" />
-                    <select
-                      value={role}
-                      onChange={(e) => setRole(e.target.value as any)}
-                      className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 bg-white transition"
-                    >
-                      <option value="trafficker">Ad Trafficker</option>
-                      <option value="adops">AdOps Manager</option>
-                      <option value="publisher">Publisher / Editor</option>
-                      <option value="admin">Administrator</option>
-                    </select>
-                  </div>
-                </div>
-              </>
-            )}
-
             <div className="space-y-1.5">
               <label className="block text-xs font-semibold text-slate-700">Work Email</label>
               <div className="relative">
@@ -203,30 +127,15 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold text-sm shadow-md shadow-blue-500/25 flex items-center justify-center gap-2 transition-all disabled:opacity-50"
             >
               {loading ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
+                <Loader2 className="w-5 h-5 animate-spin" />
               ) : (
                 <>
-                  <span>{tab === 'login' ? 'Sign In to Dashboard' : 'Create Account'}</span>
+                  <span>Sign In to Dashboard</span>
                   <ArrowRight className="w-4 h-4" />
                 </>
               )}
             </button>
           </form>
-
-          {/* Quick Demo Access Bar */}
-          <div className="pt-3 border-t border-slate-100 flex flex-col gap-2">
-            <div className="flex items-center justify-between text-[11px] text-slate-400">
-              <span>Instant Quick Access:</span>
-              <button
-                type="button"
-                onClick={() => handleFillDemo('admin@gam.io', 'Admin@12345')}
-                className="text-blue-600 hover:text-blue-700 font-semibold hover:underline flex items-center gap-1"
-              >
-                <Sparkles className="w-3 h-3 text-blue-500" />
-                Use Admin Demo Account
-              </button>
-            </div>
-          </div>
         </div>
       </div>
     </div>

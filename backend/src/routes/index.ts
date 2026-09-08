@@ -7,7 +7,8 @@ import {
   logController,
   settingsController,
   authController,
-  gamLiveController
+  gamLiveController,
+  cmsController
 } from '../controllers';
 import { testConnectionController } from '../controllers/testConnectionController';
 import { reportsController, forecastController } from '../controllers/reportsController';
@@ -60,6 +61,7 @@ router.post('/auth/register', authController.register);
 router.post('/auth/login', authController.login);
 router.get('/auth/me', authController.me);
 router.get('/auth/users', authController.listUsers);
+router.delete('/auth/users/:id', authController.deleteUser);
 
 // Reports & Performance Routes
 router.get('/reports', reportsController.getCampaignReport);
@@ -67,6 +69,17 @@ router.get('/reports/:campaignId', reportsController.getCampaignReport);
 
 // Inventory Forecast & Availability Routes
 router.post('/forecast/availability', forecastController.checkAvailability);
+
+// CMS & Partner Webhook Sync Routes
+router.get('/cms/partners', cmsController.listPartners);
+router.post('/cms/partners', cmsController.createPartner);
+router.put('/cms/partners/:id', cmsController.updatePartner);
+router.delete('/cms/partners/:id', cmsController.deletePartner);
+router.post('/cms/test', cmsController.testPartner);
+router.post('/cms/sync/campaign/:id', cmsController.syncCampaign);
+router.post('/cms/sync/ad-units', cmsController.syncAdUnits);
+router.post('/cms/fetch-elements', cmsController.fetchElements);
+router.post('/cms/push-element-dfp', cmsController.pushElementDfp);
 
 export default router;
 

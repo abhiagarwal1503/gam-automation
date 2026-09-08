@@ -31,6 +31,7 @@ export interface Advertiser {
   name: string;
   googleAdvertiserId?: string;
   status: string;
+  networkCode?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -43,6 +44,7 @@ export interface AdUnit {
   parentGoogleAdUnitId?: string;
   sizes: AdSize[];
   status: string;
+  networkCode?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -117,6 +119,7 @@ export interface ApiLog {
 
 export interface Campaign {
   id: string;
+  customName?: string;
   advertiserId?: string;
   advertiserName: string;
   bannerUrl: string;
@@ -131,6 +134,11 @@ export interface Campaign {
   googleErrorDetails?: string;
   suggestedAction?: string;
   isDryRun: boolean;
+  cmsSyncStatus?: string;
+  cmsSyncedAt?: string;
+  networkCode?: string;
+  createdBy?: string;
+  creatorEmail?: string;
   createdAt: string;
   updatedAt: string;
   order?: Order;
@@ -172,7 +180,75 @@ export interface User {
   email: string;
   role: 'admin' | 'trafficker' | 'publisher' | 'adops';
   avatar?: string;
+  networkCode?: string; // e.g. '22068249324', or 'ALL' for admin
+  partnerName?: string; // e.g. 'Blinkcorp Technologies Private Limited'
+  advertiserId?: string; // e.g. '6155963446' or 'ALL' for all partner advertisers
+  advertiserName?: string; // e.g. 'TechStar Brand' or 'All Advertisers'
   createdAt: string;
   updatedAt: string;
 }
+
+export type CmsType = 'HOCALWIRE' | 'WORDPRESS' | 'GENERIC_WEBHOOK';
+
+export interface CmsPartner {
+  id: string;
+  name: string;
+  cmsType: CmsType;
+  endpoint: string;
+  apiPath: string;
+  securityToken: string; // s-d token
+  autoSyncCampaigns: boolean;
+  autoSyncAdUnits: boolean;
+  isActive: boolean;
+  lastSyncAt?: string;
+  lastSyncStatus?: 'SUCCESS' | 'ERROR';
+  lastSyncMessage?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CmsSyncResult {
+  success: boolean;
+  partnerId: string;
+  partnerName: string;
+  endpoint: string;
+  statusCode?: number;
+  message?: string;
+  error?: string;
+  responseData?: any;
+  durationMs?: number;
+}
+
+export interface CmsElement {
+  id: string;
+  name: string;
+  divId: string;
+  slotCode: string;
+  fullSlotPath?: string;
+  networkCode?: string;
+  width: number;
+  height: number;
+  rawCall?: string;
+  sourceUrl?: string;
+}
+
+export interface PushDfpResult {
+  success: boolean;
+  partnerId: string;
+  partnerName: string;
+  endpoint: string;
+  element: CmsElement;
+  networkCode: string;
+  generatedSnippet: string;
+  headCode: string;
+  bodyCode: string;
+  completeCode: string;
+  statusCode?: number;
+  responseData?: any;
+  message?: string;
+  error?: string;
+  timestamp: string;
+}
+
+
 
