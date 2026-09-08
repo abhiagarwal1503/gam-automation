@@ -244,11 +244,31 @@ export const api = {
   },
 
   // Reports & Performance
-  async getReports(filters?: { networkCode?: string; adSlot?: string; position?: string }): Promise<{ summary: any; data: any[] }> {
+  async getReports(filters?: {
+    networkCode?: string;
+    adSlot?: string;
+    position?: string;
+    advertiser?: string;
+    status?: string;
+    dateRange?: string;
+  }): Promise<{
+    summary: any;
+    data: any[];
+    dailyTrends?: { date: string; label: string; impressions: number; clicks: number; ctr: string; revenue: number }[];
+    deviceBreakdown?: {
+      mobile: { percentage: number; impressions: number; clicks: number };
+      desktop: { percentage: number; impressions: number; clicks: number };
+      tablet: { percentage: number; impressions: number; clicks: number };
+    };
+    slotBreakdown?: { size: string; impressions: number; clicks: number; ctr: string; sharePct: number }[];
+  }> {
     const params = new URLSearchParams();
     if (filters?.networkCode && filters.networkCode !== 'all') params.append('networkCode', filters.networkCode);
     if (filters?.adSlot && filters.adSlot !== 'all') params.append('adSlot', filters.adSlot);
     if (filters?.position && filters.position !== 'all') params.append('position', filters.position);
+    if (filters?.advertiser && filters.advertiser !== 'all') params.append('advertiser', filters.advertiser);
+    if (filters?.status && filters.status !== 'all') params.append('status', filters.status);
+    if (filters?.dateRange && filters.dateRange !== 'all') params.append('dateRange', filters.dateRange);
     const queryString = params.toString() ? `?${params.toString()}` : '';
     const res = await axios.get(`${API_BASE}/reports${queryString}`);
     return res.data;

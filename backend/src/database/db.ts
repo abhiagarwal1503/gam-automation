@@ -354,6 +354,7 @@ export function initDatabase() {
   try { db.exec(`ALTER TABLE campaigns ADD COLUMN custom_name TEXT`); } catch {}
   try { db.exec(`ALTER TABLE campaigns ADD COLUMN cms_sync_status TEXT`); } catch {}
   try { db.exec(`ALTER TABLE campaigns ADD COLUMN cms_synced_at TEXT`); } catch {}
+  try { db.exec(`UPDATE campaigns SET network_code = '22068249324' WHERE network_code IS NULL OR network_code = ''`); } catch {}
 
   // Seed partner-specific ad units if needed
   try {
