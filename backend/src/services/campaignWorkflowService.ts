@@ -249,10 +249,14 @@ export class CampaignWorkflowService {
             name: adUnitName,
             code: adUnitCode,
             sizes: [size],
+            networkCode: networkCode || null,
             status: 'ACTIVE',
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString()
           });
+        } else if (!adUnit.networkCode && networkCode) {
+          adUnitRepo.updateNetworkCode(adUnit.id, networkCode);
+          adUnit.networkCode = networkCode;
         }
 
         // Always look up ad unit in GAM fresh (per network) — do not rely on cached DB ID

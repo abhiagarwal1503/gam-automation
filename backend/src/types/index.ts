@@ -214,12 +214,16 @@ export interface User {
   id: string;
   name: string;
   email: string;
-  role: 'admin' | 'trafficker' | 'publisher' | 'adops';
+  role: 'admin' | 'manager' | 'trafficker' | 'viewer' | 'publisher' | 'adops';
   avatar?: string;
   networkCode?: string; // e.g. '22068249324', or 'ALL' for admin
   partnerName?: string; // e.g. 'Blinkcorp Technologies Private Limited'
   advertiserId?: string; // e.g. '6155963446', or 'ALL' for all partner advertisers
   advertiserName?: string; // e.g. 'TechStar Brand' or 'All Advertisers'
+  status?: 'active' | 'deactivated';
+  mustChangePassword?: boolean;
+  lastLoginAt?: string;
+  isDeleted?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -227,6 +231,19 @@ export interface User {
 export interface UserRecord extends User {
   passwordHash: string;
   salt: string;
+}
+
+export type UserAuditAction = 'USER_CREATED' | 'USER_UPDATED' | 'PASSWORD_RESET' | 'PASSWORD_CHANGED' | 'USER_STATUS_CHANGED' | 'USER_DELETED';
+
+export interface UserAuditLog {
+  id: string;
+  adminId: string;
+  adminEmail: string;
+  targetUserId: string;
+  targetUserEmail: string;
+  action: UserAuditAction;
+  details?: Record<string, any>;
+  createdAt: string;
 }
 
 export type CmsType = 'HOCALWIRE' | 'WORDPRESS' | 'GENERIC_WEBHOOK';

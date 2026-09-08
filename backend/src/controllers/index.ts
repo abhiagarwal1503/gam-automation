@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import crypto from 'crypto';
 import { db } from '../database/db';
 import { User } from '../types';
 import {
@@ -13,6 +14,7 @@ import {
   logRepo,
   settingsRepo,
   userRepo,
+  userAuditRepo,
   cmsPartnerRepo
 } from '../repositories';
 import { CampaignWorkflowService } from '../services/campaignWorkflowService';
@@ -131,7 +133,9 @@ export const getAuthUser = (req: Request): User | null => {
     const token = authHeader.replace('Bearer ', '').trim();
     const decoded = JSON.parse(Buffer.from(token, 'base64').toString('utf-8'));
     if (!decoded || !decoded.id || (decoded.exp && decoded.exp < Date.now())) return null;
-    return userRepo.findById(decoded.id);
+    const user = userRepo.findById(decoded.id);
+    if (!user || user.isDeleted || user.status === 'deactivated') return null;
+    return user;
   } catch {
     return null;
   }
@@ -442,12 +446,13 @@ export const adUnitController = {
   async list(req: Request, res: Response) {
     try {
       const authUser = getAuthUser(req);
+      const isAdmin = authUser?.role === 'admin';
       let networkCode = req.query.networkCode ? String(req.query.networkCode) : undefined;
       // Partner scoping: if non-admin partner user, strictly scope to their assigned network
-      if (authUser && authUser.role !== 'admin' && authUser.networkCode && authUser.networkCode !== 'ALL') {
+      if (!isAdmin && authUser && authUser.networkCode && authUser.networkCode !== 'ALL') {
         networkCode = authUser.networkCode;
       }
-      const adUnits = adUnitRepo.list(networkCode);
+      const adUnits = adUnitRepo.list(networkCode, isAdmin);
       return res.json({ success: true, data: adUnits });
     } catch (err: any) {
       return res.status(500).json({ success: false, error: err.message });
@@ -802,7 +807,7 @@ export const authController = {
         });
       }
 
-      const { name, email, password, role, networkCode, partnerName, advertiserId, advertiserName } = req.body;
+      const { name, email, password, role, networkCode, partnerName, advertiserId, advertiserName, status, mustChangePassword } = req.body;
       if (!name || !name.trim()) {
         return res.status(400).json({ success: false, error: 'Full name is required.' });
       }
@@ -823,6 +828,8 @@ export const authController = {
       const assignedPartner = userRole === 'admin' ? 'All Networks (Global Admin)' : (partnerName || 'All Networks (Global Admin)');
       const assignedAdvId = userRole === 'admin' ? 'ALL' : (advertiserId || 'ALL');
       const assignedAdvName = userRole === 'admin' ? 'All Advertisers' : (advertiserName || 'All Advertisers');
+      const initialStatus = status === 'deactivated' ? 'deactivated' : 'active';
+      const forceChange = Boolean(mustChangePassword);
 
       const user = userRepo.create({
         name,
@@ -832,7 +839,24 @@ export const authController = {
         networkCode: assignedNetwork,
         partnerName: assignedPartner,
         advertiserId: assignedAdvId,
-        advertiserName: assignedAdvName
+        advertiserName: assignedAdvName,
+        status: initialStatus,
+        mustChangePassword: forceChange
+      });
+
+      userAuditRepo.logAction({
+        adminId: caller.id,
+        adminEmail: caller.email,
+        targetUserId: user.id,
+        targetUserEmail: user.email,
+        action: 'USER_CREATED',
+        details: {
+          role: user.role,
+          partnerName: user.partnerName,
+          advertiserName: user.advertiserName,
+          status: user.status,
+          mustChangePassword: forceChange
+        }
       });
 
       // Generate a lightweight session token
@@ -863,10 +887,21 @@ export const authController = {
         return res.status(401).json({ success: false, error: 'Invalid email or password.' });
       }
 
+      if (userRecord.isDeleted) {
+        return res.status(403).json({ success: false, error: 'This user account has been deleted.' });
+      }
+
+      if (userRecord.status === 'deactivated') {
+        return res.status(403).json({ success: false, error: 'Your account has been deactivated. Please contact an administrator.' });
+      }
+
       const isValid = userRepo.verifyPassword(userRecord, password);
       if (!isValid) {
         return res.status(401).json({ success: false, error: 'Invalid email or password.' });
       }
+
+      // Record successful login
+      userRepo.recordLogin(userRecord.id);
 
       const user = {
         id: userRecord.id,
@@ -878,6 +913,9 @@ export const authController = {
         partnerName: userRecord.partnerName,
         advertiserId: userRecord.advertiserId || undefined,
         advertiserName: userRecord.advertiserName || undefined,
+        status: userRecord.status,
+        mustChangePassword: userRecord.mustChangePassword,
+        lastLoginAt: new Date().toISOString(),
         createdAt: userRecord.createdAt,
         updatedAt: userRecord.updatedAt
       };
@@ -917,8 +955,12 @@ export const authController = {
       }
 
       const user = userRepo.findById(decoded.id);
-      if (!user) {
+      if (!user || user.isDeleted) {
         return res.status(404).json({ success: false, error: 'User not found.' });
+      }
+
+      if (user.status === 'deactivated') {
+        return res.status(403).json({ success: false, error: 'Your account has been deactivated.' });
       }
 
       return res.json({
@@ -943,6 +985,164 @@ export const authController = {
     }
   },
 
+  async updateUser(req: Request, res: Response) {
+    try {
+      const caller = getAuthUser(req);
+      if (!caller || caller.role !== 'admin') {
+        return res.status(403).json({ success: false, error: 'Only administrators can edit user accounts.' });
+      }
+
+      const id = getParam(req.params.id);
+      const existing = userRepo.findById(id);
+      if (!existing || existing.isDeleted) {
+        return res.status(404).json({ success: false, error: 'User not found.' });
+      }
+
+      const { name, email, role, networkCode, partnerName, advertiserId, advertiserName, status } = req.body;
+
+      if (email && email.trim().toLowerCase() !== existing.email.toLowerCase()) {
+        const emailExists = userRepo.findByEmail(email.trim());
+        if (emailExists && emailExists.id !== id) {
+          return res.status(409).json({ success: false, error: 'Email is already registered by another account.' });
+        }
+      }
+
+      // Prevent admin deactivating or demoting themselves
+      if (id === caller.id) {
+        if (status === 'deactivated') {
+          return res.status(400).json({ success: false, error: 'You cannot deactivate your own admin account.' });
+        }
+        if (role && role !== 'admin') {
+          return res.status(400).json({ success: false, error: 'You cannot demote your own admin account.' });
+        }
+      }
+
+      const updated = userRepo.update(id, {
+        name,
+        email,
+        role,
+        networkCode: role === 'admin' ? 'ALL' : (networkCode || existing.networkCode),
+        partnerName: role === 'admin' ? 'All Networks (Global Admin)' : (partnerName || existing.partnerName),
+        advertiserId: role === 'admin' ? 'ALL' : (advertiserId || existing.advertiserId),
+        advertiserName: role === 'admin' ? 'All Advertisers' : (advertiserName || existing.advertiserName),
+        status: status || existing.status
+      });
+
+      userAuditRepo.logAction({
+        adminId: caller.id,
+        adminEmail: caller.email,
+        targetUserId: id,
+        targetUserEmail: updated?.email || existing.email,
+        action: 'USER_UPDATED',
+        details: {
+          nameDiff: name && name !== existing.name ? { from: existing.name, to: name } : undefined,
+          emailDiff: email && email !== existing.email ? { from: existing.email, to: email } : undefined,
+          roleDiff: role && role !== existing.role ? { from: existing.role, to: role } : undefined,
+          partnerDiff: partnerName && partnerName !== existing.partnerName ? { from: existing.partnerName, to: partnerName } : undefined,
+          advertiserDiff: advertiserName && advertiserName !== existing.advertiserName ? { from: existing.advertiserName, to: advertiserName } : undefined,
+          statusDiff: status && status !== existing.status ? { from: existing.status, to: status } : undefined
+        }
+      });
+
+      return res.json({ success: true, message: 'User updated successfully.', data: updated });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err.message || 'Failed to update user.' });
+    }
+  },
+
+  async resetUserPassword(req: Request, res: Response) {
+    try {
+      const caller = getAuthUser(req);
+      if (!caller || caller.role !== 'admin') {
+        return res.status(403).json({ success: false, error: 'Only administrators can reset passwords.' });
+      }
+
+      const id = getParam(req.params.id);
+      const targetUser = userRepo.findById(id);
+      if (!targetUser || targetUser.isDeleted) {
+        return res.status(404).json({ success: false, error: 'User not found.' });
+      }
+
+      const { newPassword, mustChangePassword } = req.body;
+      let passwordToSet = newPassword;
+      let isGenerated = false;
+
+      if (!passwordToSet || !passwordToSet.trim()) {
+        const rand = crypto.randomBytes(4).toString('hex');
+        passwordToSet = `Temp#${rand.toUpperCase()}9!`;
+        isGenerated = true;
+      } else if (passwordToSet.length < 6) {
+        return res.status(400).json({ success: false, error: 'Password must be at least 6 characters long.' });
+      }
+
+      const forceChange = mustChangePassword !== false;
+      userRepo.resetPassword(id, passwordToSet, forceChange);
+
+      userAuditRepo.logAction({
+        adminId: caller.id,
+        adminEmail: caller.email,
+        targetUserId: id,
+        targetUserEmail: targetUser.email,
+        action: 'PASSWORD_RESET',
+        details: { isGenerated, forceChange }
+      });
+
+      return res.json({
+        success: true,
+        message: 'Password reset successfully.',
+        data: {
+          temporaryPassword: passwordToSet,
+          mustChangePassword: forceChange
+        }
+      });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err.message || 'Failed to reset password.' });
+    }
+  },
+
+  async toggleUserStatus(req: Request, res: Response) {
+    try {
+      const caller = getAuthUser(req);
+      if (!caller || caller.role !== 'admin') {
+        return res.status(403).json({ success: false, error: 'Only administrators can toggle user status.' });
+      }
+
+      const id = getParam(req.params.id);
+      if (id === caller.id) {
+        return res.status(400).json({ success: false, error: 'You cannot change your own account status.' });
+      }
+
+      const targetUser = userRepo.findById(id);
+      if (!targetUser || targetUser.isDeleted) {
+        return res.status(404).json({ success: false, error: 'User not found.' });
+      }
+
+      const { status } = req.body;
+      if (status !== 'active' && status !== 'deactivated') {
+        return res.status(400).json({ success: false, error: 'Status must be active or deactivated.' });
+      }
+
+      userRepo.updateStatus(id, status);
+
+      userAuditRepo.logAction({
+        adminId: caller.id,
+        adminEmail: caller.email,
+        targetUserId: id,
+        targetUserEmail: targetUser.email,
+        action: 'USER_STATUS_CHANGED',
+        details: { previousStatus: targetUser.status, newStatus: status }
+      });
+
+      return res.json({
+        success: true,
+        message: `User ${status === 'active' ? 'activated' : 'deactivated'} successfully.`,
+        data: userRepo.findById(id)
+      });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err.message || 'Failed to toggle status.' });
+    }
+  },
+
   async deleteUser(req: Request, res: Response) {
     try {
       const caller = getAuthUser(req);
@@ -953,8 +1153,97 @@ export const authController = {
       if (id === caller.id) {
         return res.status(400).json({ success: false, error: 'You cannot delete your own account.' });
       }
-      userRepo.delete(id);
+
+      const targetUser = userRepo.findById(id);
+      if (!targetUser || targetUser.isDeleted) {
+        return res.status(404).json({ success: false, error: 'User not found.' });
+      }
+
+      userRepo.softDelete(id);
+
+      userAuditRepo.logAction({
+        adminId: caller.id,
+        adminEmail: caller.email,
+        targetUserId: id,
+        targetUserEmail: targetUser.email,
+        action: 'USER_DELETED',
+        details: { softDelete: true }
+      });
+
       return res.json({ success: true, message: 'User deleted successfully.' });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err.message });
+    }
+  },
+
+  async changePassword(req: Request, res: Response) {
+    try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return res.status(401).json({ success: false, error: 'Authentication required.' });
+      }
+
+      const token = authHeader.replace('Bearer ', '').trim();
+      let decoded: any;
+      try {
+        decoded = JSON.parse(Buffer.from(token, 'base64').toString('utf-8'));
+      } catch {
+        return res.status(401).json({ success: false, error: 'Invalid token.' });
+      }
+
+      if (!decoded || !decoded.id) {
+        return res.status(401).json({ success: false, error: 'Invalid token.' });
+      }
+
+      const userRecord = userRepo.findByEmail(decoded.email);
+      if (!userRecord || userRecord.id !== decoded.id || userRecord.isDeleted || userRecord.status === 'deactivated') {
+        return res.status(403).json({ success: false, error: 'User account not accessible.' });
+      }
+
+      const { currentPassword, newPassword } = req.body;
+      if (!newPassword || newPassword.length < 6) {
+        return res.status(400).json({ success: false, error: 'New password must be at least 6 characters long.' });
+      }
+
+      // If user has not been forced or currentPassword is supplied, verify it
+      if (currentPassword) {
+        const isValid = userRepo.verifyPassword(userRecord, currentPassword);
+        if (!isValid) {
+          return res.status(400).json({ success: false, error: 'Current password is incorrect.' });
+        }
+      }
+
+      userRepo.changePassword(userRecord.id, newPassword);
+
+      userAuditRepo.logAction({
+        adminId: userRecord.id,
+        adminEmail: userRecord.email,
+        targetUserId: userRecord.id,
+        targetUserEmail: userRecord.email,
+        action: 'PASSWORD_CHANGED',
+        details: { bySelf: true }
+      });
+
+      const updatedUser = userRepo.findById(userRecord.id);
+      return res.json({
+        success: true,
+        message: 'Password changed successfully.',
+        data: { user: updatedUser }
+      });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err.message || 'Failed to change password.' });
+    }
+  },
+
+  async listAuditLogs(req: Request, res: Response) {
+    try {
+      const caller = getAuthUser(req);
+      if (!caller || caller.role !== 'admin') {
+        return res.status(403).json({ success: false, error: 'Only administrators can view user audit logs.' });
+      }
+
+      const logs = userAuditRepo.list(100);
+      return res.json({ success: true, data: logs });
     } catch (err: any) {
       return res.status(500).json({ success: false, error: err.message });
     }

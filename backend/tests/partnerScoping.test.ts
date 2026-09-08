@@ -118,8 +118,13 @@ describe('Partner Scoping & Demo Admin System', () => {
     const scopedBlink = (require('../src/repositories').adUnitRepo).list('22068249324');
     const scopedFederal = (require('../src/repositories').adUnitRepo).list('22665183713');
 
-    expect(scopedBlink.every((u: any) => !u.networkCode || u.networkCode === '22068249324')).toBe(true);
-    expect(scopedFederal.every((u: any) => !u.networkCode || u.networkCode === '22665183713')).toBe(true);
+    expect(scopedBlink.every((u: any) => u.networkCode === '22068249324')).toBe(true);
+    expect(scopedFederal.every((u: any) => u.networkCode === '22665183713')).toBe(true);
+    expect(scopedBlink.some((u: any) => !u.networkCode)).toBe(false);
+
+    // Admin can see all including default units
+    const adminUnits = (require('../src/repositories').adUnitRepo).list('ALL', true);
+    expect(adminUnits.some((u: any) => !u.networkCode)).toBe(true);
   });
 
   test('logController, reportsController, and forecastController reject non-admin users with 403', async () => {

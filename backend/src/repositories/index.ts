@@ -13,6 +13,7 @@ import {
   AdSize,
   User,
   UserRecord,
+  UserAuditLog,
   CmsPartner
 } from '../types';
 
@@ -32,13 +33,17 @@ export const userRepo = {
       partnerName: row.partner_name || undefined,
       advertiserId: row.advertiser_id || undefined,
       advertiserName: row.advertiser_name || undefined,
+      status: row.status || 'active',
+      mustChangePassword: Boolean(row.must_change_password),
+      lastLoginAt: row.last_login_at || undefined,
+      isDeleted: Boolean(row.is_deleted),
       createdAt: row.created_at,
       updatedAt: row.updated_at
     };
   },
 
   findById(id: string): User | null {
-    const row: any = db.prepare('SELECT id, name, email, role, avatar, network_code, partner_name, advertiser_id, advertiser_name, created_at, updated_at FROM users WHERE id = ?').get(id);
+    const row: any = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
     if (!row) return null;
     return {
       id: row.id,
@@ -50,6 +55,10 @@ export const userRepo = {
       partnerName: row.partner_name || undefined,
       advertiserId: row.advertiser_id || undefined,
       advertiserName: row.advertiser_name || undefined,
+      status: row.status || 'active',
+      mustChangePassword: Boolean(row.must_change_password),
+      lastLoginAt: row.last_login_at || undefined,
+      isDeleted: Boolean(row.is_deleted),
       createdAt: row.created_at,
       updatedAt: row.updated_at
     };
@@ -65,6 +74,8 @@ export const userRepo = {
     partnerName?: string;
     advertiserId?: string;
     advertiserName?: string;
+    status?: 'active' | 'deactivated';
+    mustChangePassword?: boolean;
   }): User {
     const salt = crypto.randomBytes(16).toString('hex');
     const passwordHash = crypto.scryptSync(data.password, salt, 64).toString('hex');
@@ -76,10 +87,12 @@ export const userRepo = {
     const partnerName = data.partnerName || 'All Networks (Global Admin)';
     const advertiserId = data.advertiserId || 'ALL';
     const advertiserName = data.advertiserName || 'All Advertisers';
+    const status = data.status || 'active';
+    const mustChangePassword = data.mustChangePassword ? 1 : 0;
 
     db.prepare(`
-      INSERT INTO users (id, name, email, password_hash, salt, role, avatar, network_code, partner_name, advertiser_id, advertiser_name, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO users (id, name, email, password_hash, salt, role, avatar, network_code, partner_name, advertiser_id, advertiser_name, status, must_change_password, is_deleted, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
     `).run(
       id,
       data.name.trim(),
@@ -92,6 +105,8 @@ export const userRepo = {
       partnerName,
       advertiserId,
       advertiserName,
+      status,
+      mustChangePassword,
       now,
       now
     );
@@ -106,9 +121,71 @@ export const userRepo = {
       partnerName,
       advertiserId,
       advertiserName,
+      status,
+      mustChangePassword: Boolean(mustChangePassword),
       createdAt: now,
       updatedAt: now
     };
+  },
+
+  update(id: string, data: Partial<User>): User | null {
+    const existing = userRepo.findById(id);
+    if (!existing) return null;
+
+    const now = new Date().toISOString();
+    const name = data.name !== undefined ? data.name.trim() : existing.name;
+    const email = data.email !== undefined ? data.email.trim().toLowerCase() : existing.email;
+    const role = data.role !== undefined ? data.role : existing.role;
+    const networkCode = data.networkCode !== undefined ? data.networkCode : (existing.networkCode || 'ALL');
+    const partnerName = data.partnerName !== undefined ? data.partnerName : (existing.partnerName || 'All Networks');
+    const advertiserId = data.advertiserId !== undefined ? data.advertiserId : (existing.advertiserId || 'ALL');
+    const advertiserName = data.advertiserName !== undefined ? data.advertiserName : (existing.advertiserName || 'All Advertisers');
+    const status = data.status !== undefined ? data.status : (existing.status || 'active');
+
+    db.prepare(`
+      UPDATE users
+      SET name = ?, email = ?, role = ?, network_code = ?, partner_name = ?, advertiser_id = ?, advertiser_name = ?, status = ?, updated_at = ?
+      WHERE id = ?
+    `).run(name, email, role, networkCode, partnerName, advertiserId, advertiserName, status, now, id);
+
+    return userRepo.findById(id);
+  },
+
+  updateStatus(id: string, status: 'active' | 'deactivated'): boolean {
+    const now = new Date().toISOString();
+    const res = db.prepare('UPDATE users SET status = ?, updated_at = ? WHERE id = ?').run(status, now, id);
+    return res.changes > 0;
+  },
+
+  resetPassword(id: string, newPassword: string, mustChangePassword = true): boolean {
+    const salt = crypto.randomBytes(16).toString('hex');
+    const passwordHash = crypto.scryptSync(newPassword, salt, 64).toString('hex');
+    const now = new Date().toISOString();
+    const res = db.prepare(`
+      UPDATE users
+      SET password_hash = ?, salt = ?, must_change_password = ?, updated_at = ?
+      WHERE id = ?
+    `).run(passwordHash, salt, mustChangePassword ? 1 : 0, now, id);
+    return res.changes > 0;
+  },
+
+  changePassword(id: string, newPassword: string): boolean {
+    const salt = crypto.randomBytes(16).toString('hex');
+    const passwordHash = crypto.scryptSync(newPassword, salt, 64).toString('hex');
+    const now = new Date().toISOString();
+    const res = db.prepare(`
+      UPDATE users
+      SET password_hash = ?, salt = ?, must_change_password = 0, updated_at = ?
+      WHERE id = ?
+    `).run(passwordHash, salt, now, id);
+    return res.changes > 0;
+  },
+
+  recordLogin(id: string): void {
+    const now = new Date().toISOString();
+    try {
+      db.prepare('UPDATE users SET last_login_at = ? WHERE id = ?').run(now, id);
+    } catch {}
   },
 
   verifyPassword(userRecord: UserRecord, passwordAttempt: string): boolean {
@@ -116,8 +193,11 @@ export const userRepo = {
     return crypto.timingSafeEqual(Buffer.from(userRecord.passwordHash, 'hex'), Buffer.from(hashAttempt, 'hex'));
   },
 
-  list(): User[] {
-    const rows: any[] = db.prepare('SELECT id, name, email, role, avatar, network_code, partner_name, advertiser_id, advertiser_name, created_at, updated_at FROM users ORDER BY created_at DESC').all();
+  list(includeDeleted = false): User[] {
+    const query = includeDeleted
+      ? 'SELECT * FROM users ORDER BY created_at DESC'
+      : 'SELECT * FROM users WHERE is_deleted = 0 OR is_deleted IS NULL ORDER BY created_at DESC';
+    const rows: any[] = db.prepare(query).all();
     return rows.map(r => ({
       id: r.id,
       name: r.name,
@@ -128,14 +208,68 @@ export const userRepo = {
       partnerName: r.partner_name || undefined,
       advertiserId: r.advertiser_id || undefined,
       advertiserName: r.advertiser_name || undefined,
+      status: r.status || 'active',
+      mustChangePassword: Boolean(r.must_change_password),
+      lastLoginAt: r.last_login_at || undefined,
+      isDeleted: Boolean(r.is_deleted),
       createdAt: r.created_at,
       updatedAt: r.updated_at
     }));
   },
 
+  softDelete(id: string): boolean {
+    const now = new Date().toISOString();
+    const res = db.prepare('UPDATE users SET is_deleted = 1, status = ?, updated_at = ? WHERE id = ?').run('deactivated', now, id);
+    return res.changes > 0;
+  },
+
   delete(id: string): boolean {
     const res = db.prepare('DELETE FROM users WHERE id = ?').run(id);
     return res.changes > 0;
+  }
+};
+
+export const userAuditRepo = {
+  logAction(entry: {
+    adminId: string;
+    adminEmail: string;
+    targetUserId: string;
+    targetUserEmail: string;
+    action: UserAuditLog['action'];
+    details?: Record<string, any>;
+  }): UserAuditLog {
+    const id = `aud_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+    const now = new Date().toISOString();
+    const detailsJson = entry.details ? JSON.stringify(entry.details) : null;
+    db.prepare(`
+      INSERT INTO user_audit_logs (id, admin_id, admin_email, target_user_id, target_user_email, action, details, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(id, entry.adminId, entry.adminEmail, entry.targetUserId, entry.targetUserEmail, entry.action, detailsJson, now);
+
+    return {
+      id,
+      adminId: entry.adminId,
+      adminEmail: entry.adminEmail,
+      targetUserId: entry.targetUserId,
+      targetUserEmail: entry.targetUserEmail,
+      action: entry.action,
+      details: entry.details,
+      createdAt: now
+    };
+  },
+
+  list(limit = 100): UserAuditLog[] {
+    const rows: any[] = db.prepare('SELECT * FROM user_audit_logs ORDER BY created_at DESC LIMIT ?').all(limit);
+    return rows.map(r => ({
+      id: r.id,
+      adminId: r.admin_id,
+      adminEmail: r.admin_email,
+      targetUserId: r.target_user_id,
+      targetUserEmail: r.target_user_email,
+      action: r.action,
+      details: r.details ? JSON.parse(r.details) : undefined,
+      createdAt: r.created_at
+    }));
   }
 };
 
@@ -283,12 +417,25 @@ export const adUnitRepo = {
       .run(googleAdUnitId, new Date().toISOString(), id);
   },
 
-  list(networkCode?: string): AdUnit[] {
+  updateNetworkCode(id: string, networkCode: string): void {
+    db.prepare('UPDATE ad_units SET network_code = ?, updated_at = ? WHERE id = ?')
+      .run(networkCode, new Date().toISOString(), id);
+  },
+
+  list(networkCode?: string, isAdmin: boolean = false): AdUnit[] {
     let rows: any[];
     if (networkCode && networkCode !== 'ALL') {
-      rows = db.prepare('SELECT * FROM ad_units WHERE network_code = ? OR network_code IS NULL ORDER BY created_at DESC').all(networkCode);
+      if (networkCode === 'DEFAULT' || networkCode === 'GLOBAL') {
+        rows = db.prepare("SELECT * FROM ad_units WHERE network_code IS NULL OR network_code = '' ORDER BY created_at DESC").all();
+      } else {
+        rows = db.prepare('SELECT * FROM ad_units WHERE network_code = ? ORDER BY created_at DESC').all(networkCode);
+      }
     } else {
-      rows = db.prepare('SELECT * FROM ad_units ORDER BY created_at DESC').all();
+      if (isAdmin) {
+        rows = db.prepare('SELECT * FROM ad_units ORDER BY created_at DESC').all();
+      } else {
+        rows = db.prepare("SELECT * FROM ad_units WHERE network_code IS NOT NULL AND network_code != '' ORDER BY created_at DESC").all();
+      }
     }
     return rows.map(row => ({
       id: row.id,

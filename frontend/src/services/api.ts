@@ -8,6 +8,7 @@ import {
   SystemSettings,
   AdSize,
   User,
+  UserAuditLog,
   CmsPartner,
   CmsSyncResult,
   CmsElement,
@@ -218,6 +219,8 @@ export const api = {
     partnerName?: string;
     advertiserId?: string;
     advertiserName?: string;
+    status?: 'active' | 'deactivated';
+    mustChangePassword?: boolean;
   }): Promise<{ user: User; token: string }> {
     const res = await axios.post(`${API_BASE}/auth/register`, data);
     return res.data.data;
@@ -238,9 +241,34 @@ export const api = {
     return res.data.data;
   },
 
+  async updateUser(id: string, data: Partial<User>): Promise<User> {
+    const res = await axios.put(`${API_BASE}/auth/users/${id}`, data);
+    return res.data.data;
+  },
+
+  async resetUserPassword(id: string, options?: { newPassword?: string; mustChangePassword?: boolean }): Promise<{ temporaryPassword: string; mustChangePassword: boolean }> {
+    const res = await axios.post(`${API_BASE}/auth/users/${id}/reset-password`, options || {});
+    return res.data.data;
+  },
+
+  async toggleUserStatus(id: string, status: 'active' | 'deactivated'): Promise<User> {
+    const res = await axios.post(`${API_BASE}/auth/users/${id}/toggle-status`, { status });
+    return res.data.data;
+  },
+
   async deleteUser(id: string): Promise<{ success: boolean; message: string }> {
     const res = await axios.delete(`${API_BASE}/auth/users/${id}`);
     return res.data;
+  },
+
+  async changePassword(data: { currentPassword?: string; newPassword: string }): Promise<{ user: User }> {
+    const res = await axios.post(`${API_BASE}/auth/change-password`, data);
+    return res.data.data;
+  },
+
+  async getUserAuditLogs(): Promise<UserAuditLog[]> {
+    const res = await axios.get(`${API_BASE}/auth/users/audit-logs`);
+    return res.data.data;
   },
 
   // Reports & Performance

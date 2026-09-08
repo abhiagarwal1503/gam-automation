@@ -14,11 +14,12 @@ import { ReportsPage } from './pages/ReportsPage';
 import { ForecasterPage } from './pages/ForecasterPage';
 import { LogsPage } from './pages/LogsPage';
 import { SettingsPage } from './pages/SettingsPage';
+import { PasswordChangeModal } from './components/PasswordChangeModal';
 import { api } from './services/api';
 import { RefreshCw } from 'lucide-react';
 
 function AppContent() {
-  const { isAuthenticated, loading, isAdmin } = useAuth();
+  const { user, isAuthenticated, loading, isAdmin } = useAuth();
   const [activeTab, setActiveTab] = useState<string>('dashboard');
   const [selectedCampaignId, setSelectedCampaignId] = useState<string | null>(null);
   const [isGamConnected, setIsGamConnected] = useState<boolean>(false);
@@ -122,6 +123,11 @@ function AppContent() {
 
         {effectiveTab === 'settings' && isAdmin && <SettingsPage />}
       </main>
+
+      {/* Mandatory Password Change Enforcer Modal */}
+      {Boolean(isAuthenticated && user?.mustChangePassword) && (
+        <PasswordChangeModal isOpen={true} isForced={true} />
+      )}
 
       {/* Footer */}
       <footer className="bg-white/80 backdrop-blur-xs border-t border-slate-200 py-5 text-center text-xs text-slate-500">

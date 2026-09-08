@@ -3,6 +3,7 @@ import { Grid, PlusCircle, Search, RefreshCw, Layers, Check, Copy, AlertCircle, 
 import { api } from '../services/api';
 import { useToast } from '../context/ToastContext';
 import { useAuth } from '../context/AuthContext';
+import { MANAGED_NETWORKS } from '../constants/networks';
 import { AdUnit, AdSize } from '../types';
 
 export const AdUnitsPage: React.FC = () => {
@@ -13,12 +14,14 @@ export const AdUnitsPage: React.FC = () => {
   const [search, setSearch] = useState<string>('');
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
   const [syncingCms, setSyncingCms] = useState<boolean>(false);
+  const [selectedPartnerNetwork, setSelectedPartnerNetwork] = useState<string>('ALL');
 
   // Form state
   const [name, setName] = useState<string>('');
   const [code, setCode] = useState<string>('');
   const [width, setWidth] = useState<number>(300);
   const [height, setHeight] = useState<number>(250);
+  const [modalNetworkCode, setModalNetworkCode] = useState<string>('DEFAULT');
   const [creating, setCreating] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -26,7 +29,9 @@ export const AdUnitsPage: React.FC = () => {
   const fetchAdUnits = async () => {
     setLoading(true);
     try {
-      const scopeCode = isPartnerScoped ? user?.networkCode : (activeNetworkCode !== 'ALL' ? activeNetworkCode : undefined);
+      const scopeCode = isPartnerScoped
+        ? user?.networkCode
+        : (selectedPartnerNetwork !== 'ALL' ? selectedPartnerNetwork : (activeNetworkCode !== 'ALL' ? activeNetworkCode : undefined));
       const data = await api.getAdUnits(scopeCode);
       setAdUnits(data);
     } catch (err) {
@@ -38,7 +43,7 @@ export const AdUnitsPage: React.FC = () => {
 
   useEffect(() => {
     fetchAdUnits();
-  }, [isPartnerScoped, user?.networkCode, activeNetworkCode]);
+  }, [isPartnerScoped, user?.networkCode, activeNetworkCode, selectedPartnerNetwork]);
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -50,11 +55,15 @@ export const AdUnitsPage: React.FC = () => {
 
     setCreating(true);
     try {
+      const targetNetwork = isPartnerScoped
+        ? user?.networkCode
+        : (modalNetworkCode === 'DEFAULT' ? undefined : modalNetworkCode);
+
       await api.createAdUnit({
         name,
         code,
         sizes: [{ width, height, label: `${width}x${height}` }],
-        networkCode: isPartnerScoped ? user?.networkCode : (activeNetworkCode !== 'ALL' ? activeNetworkCode : undefined)
+        networkCode: targetNetwork
       });
       setIsModalOpen(false);
       setName('');
@@ -90,11 +99,15 @@ export const AdUnitsPage: React.FC = () => {
     }
   };
 
+  // Partner user strictly sees only units created by that partner
+  // Admin sees all, with option to filter by partner or view default units
   const scopedAdUnits = isPartnerScoped
-    ? adUnits.filter(u => !u.networkCode || u.networkCode === user?.networkCode)
-    : (activeNetworkCode && activeNetworkCode !== 'ALL'
-        ? adUnits.filter(u => !u.networkCode || u.networkCode === activeNetworkCode)
-        : adUnits);
+    ? adUnits.filter(u => u.networkCode === user?.networkCode)
+    : (selectedPartnerNetwork === 'DEFAULT'
+        ? adUnits.filter(u => !u.networkCode)
+        : (selectedPartnerNetwork !== 'ALL'
+            ? adUnits.filter(u => u.networkCode === selectedPartnerNetwork)
+            : (activeNetworkCode !== 'ALL' ? adUnits.filter(u => u.networkCode === activeNetworkCode) : adUnits)));
 
   const filtered = scopedAdUnits.filter(u =>
     u.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -151,6 +164,16 @@ export const AdUnitsPage: React.FC = () => {
             Scoped Access
           </span>
         </div>
+      ) : selectedPartnerNetwork === 'DEFAULT' ? (
+        <div className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-purple-50/90 border border-purple-200 text-purple-900 text-xs font-bold w-fit shadow-2xs">
+          <Shield className="w-4 h-4 text-purple-600 shrink-0" />
+          <span>Showing Default / Global Slots (Admin Only)</span>
+        </div>
+      ) : selectedPartnerNetwork !== 'ALL' ? (
+        <div className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-indigo-50/90 border border-indigo-200 text-indigo-900 text-xs font-bold w-fit shadow-2xs">
+          <Building2 className="w-4 h-4 text-indigo-600 shrink-0" />
+          <span>Filtered Partner Network: {MANAGED_NETWORKS.find(n => n.code === selectedPartnerNetwork)?.name || selectedPartnerNetwork}</span>
+        </div>
       ) : activeNetworkCode !== 'ALL' ? (
         <div className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-indigo-50/90 border border-indigo-200 text-indigo-900 text-xs font-bold w-fit shadow-2xs">
           <Building2 className="w-4 h-4 text-indigo-600 shrink-0" />
@@ -158,8 +181,8 @@ export const AdUnitsPage: React.FC = () => {
         </div>
       ) : null}
 
-      {/* Search Bar */}
-      <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between">
+      {/* Search & Network Filter Bar */}
+      <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="relative w-full sm:w-80">
           <Search className="w-4 h-4 absolute left-3.5 top-3 text-slate-400" />
           <input
@@ -170,6 +193,25 @@ export const AdUnitsPage: React.FC = () => {
             className="w-full pl-10 pr-4 py-2 text-xs rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600"
           />
         </div>
+
+        {!isPartnerScoped && (
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-slate-500 font-medium whitespace-nowrap">Filter Network:</span>
+            <select
+              value={selectedPartnerNetwork}
+              onChange={(e) => setSelectedPartnerNetwork(e.target.value)}
+              className="px-3 py-2 text-xs rounded-xl border border-slate-200 bg-white font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600"
+            >
+              <option value="ALL">🌐 All Inventory & Default Units</option>
+              <option value="DEFAULT">🛡️ Default / Global (Admin Only)</option>
+              {MANAGED_NETWORKS.map(net => (
+                <option key={net.code} value={net.code}>
+                  🏢 {net.shortName || net.name} ({net.code})
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
       </div>
 
       {/* Ad Units Table */}
@@ -210,8 +252,22 @@ export const AdUnitsPage: React.FC = () => {
                       /{unit.code}
                     </td>
                     {isAdmin && (
-                      <td className="py-4 px-6 font-mono text-xs text-slate-500">
-                        {unit.networkCode || 'Global'}
+                      <td className="py-4 px-6 text-xs">
+                        {unit.networkCode ? (
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-800 border border-blue-200">
+                            <Building2 className="w-3.5 h-3.5 text-blue-600" />
+                            <span>
+                              {MANAGED_NETWORKS.find(n => n.code === unit.networkCode)?.shortName ||
+                               MANAGED_NETWORKS.find(n => n.code === unit.networkCode)?.name ||
+                               unit.networkCode}
+                            </span>
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-purple-100 text-purple-900 border border-purple-200">
+                            <Shield className="w-3.5 h-3.5 text-purple-700" />
+                            <span>Default (Admin Only)</span>
+                          </span>
+                        )}
                       </td>
                     )}
                     <td className="py-4 px-6">
@@ -282,6 +338,36 @@ export const AdUnitsPage: React.FC = () => {
                 <div className="p-3 bg-rose-50 border border-rose-200 text-rose-800 rounded-xl text-xs flex items-center gap-2">
                   <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
                   {error}
+                </div>
+              )}
+
+              {/* Partner Scope / Network Assignment */}
+              {isAdmin ? (
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-bold uppercase text-slate-700">Assign Partner Network / Scope</label>
+                  <select
+                    value={modalNetworkCode}
+                    onChange={(e) => setModalNetworkCode(e.target.value)}
+                    className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 font-medium"
+                  >
+                    <option value="DEFAULT">🛡️ Default / Global (Admin Only)</option>
+                    {MANAGED_NETWORKS.map(net => (
+                      <option key={net.code} value={net.code}>
+                        🏢 {net.name} ({net.code})
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-[11px] text-slate-500">
+                    Default units show for Admin only. Assign a partner to make this unit visible to that partner.
+                  </p>
+                </div>
+              ) : (
+                <div className="p-3 bg-blue-50/90 border border-blue-200 rounded-xl text-xs font-semibold text-blue-950 flex items-start gap-2.5">
+                  <Building2 className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+                  <div>
+                    <div>Partner Inventory Scope: <strong>{user?.partnerName}</strong></div>
+                    <div className="font-mono text-[11px] text-blue-700 mt-0.5">Network Code: {user?.networkCode}</div>
+                  </div>
                 </div>
               )}
 

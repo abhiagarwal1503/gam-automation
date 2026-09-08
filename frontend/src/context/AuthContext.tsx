@@ -7,7 +7,9 @@ interface AuthContextType {
   loading: boolean;
   login: (data: { email: string; password: string }) => Promise<void>;
   register: (data: { name: string; email: string; password: string; role?: User['role']; networkCode?: string; partnerName?: string; advertiserId?: string; advertiserName?: string }) => Promise<void>;
-  registerUserByAdmin: (data: { name: string; email: string; password: string; role?: User['role']; networkCode?: string; partnerName?: string; advertiserId?: string; advertiserName?: string }) => Promise<User>;
+  registerUserByAdmin: (data: { name: string; email: string; password: string; role?: User['role']; networkCode?: string; partnerName?: string; advertiserId?: string; advertiserName?: string; status?: 'active' | 'deactivated'; mustChangePassword?: boolean }) => Promise<User>;
+  changePassword: (data: { currentPassword?: string; newPassword: string }) => Promise<void>;
+  updateCurrentUser: (user: User) => void;
   logout: () => void;
   isAuthenticated: boolean;
   isAdmin: boolean;
@@ -58,9 +60,33 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   // Admin registers a user without overwriting their own admin session
-  const registerUserByAdmin = async (data: { name: string; email: string; password: string; role?: User['role']; networkCode?: string; partnerName?: string; advertiserId?: string; advertiserName?: string }): Promise<User> => {
+  const registerUserByAdmin = async (data: {
+    name: string;
+    email: string;
+    password: string;
+    role?: User['role'];
+    networkCode?: string;
+    partnerName?: string;
+    advertiserId?: string;
+    advertiserName?: string;
+    status?: 'active' | 'deactivated';
+    mustChangePassword?: boolean;
+  }): Promise<User> => {
     const res = await api.register(data);
     return res.user;
+  };
+
+  const changePassword = async (data: { currentPassword?: string; newPassword: string }) => {
+    const res = await api.changePassword(data);
+    if (res.user) {
+      setUser(res.user);
+    } else if (user) {
+      setUser({ ...user, mustChangePassword: false });
+    }
+  };
+
+  const updateCurrentUser = (updated: User) => {
+    setUser(updated);
   };
 
   const logout = () => {
@@ -88,6 +114,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         login,
         register,
         registerUserByAdmin,
+        changePassword,
+        updateCurrentUser,
         logout,
         isAuthenticated: Boolean(user),
         isAdmin,

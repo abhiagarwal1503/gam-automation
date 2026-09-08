@@ -61,7 +61,12 @@ router.post('/auth/register', authController.register);
 router.post('/auth/login', authController.login);
 router.get('/auth/me', authController.me);
 router.get('/auth/users', authController.listUsers);
+router.put('/auth/users/:id', authController.updateUser);
+router.post('/auth/users/:id/reset-password', authController.resetUserPassword);
+router.post('/auth/users/:id/toggle-status', authController.toggleUserStatus);
 router.delete('/auth/users/:id', authController.deleteUser);
+router.post('/auth/change-password', authController.changePassword);
+router.get('/auth/users/audit-logs', authController.listAuditLogs);
 
 // Reports & Performance Routes
 router.get('/reports', reportsController.getCampaignReport);

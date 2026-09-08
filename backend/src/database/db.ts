@@ -162,8 +162,23 @@ export function initDatabase() {
       partner_name TEXT,
       advertiser_id TEXT DEFAULT 'ALL',
       advertiser_name TEXT DEFAULT 'All Advertisers',
+      status TEXT DEFAULT 'active',
+      must_change_password INTEGER DEFAULT 0,
+      last_login_at TEXT,
+      is_deleted INTEGER DEFAULT 0,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS user_audit_logs (
+      id TEXT PRIMARY KEY,
+      admin_id TEXT NOT NULL,
+      admin_email TEXT NOT NULL,
+      target_user_id TEXT NOT NULL,
+      target_user_email TEXT NOT NULL,
+      action TEXT NOT NULL,
+      details TEXT,
+      created_at TEXT NOT NULL
     );
  
     CREATE TABLE IF NOT EXISTS cms_partners (
@@ -188,6 +203,10 @@ export function initDatabase() {
   try { db.exec(`ALTER TABLE users ADD COLUMN partner_name TEXT`); } catch {}
   try { db.exec(`ALTER TABLE users ADD COLUMN advertiser_id TEXT DEFAULT 'ALL'`); } catch {}
   try { db.exec(`ALTER TABLE users ADD COLUMN advertiser_name TEXT DEFAULT 'All Advertisers'`); } catch {}
+  try { db.exec(`ALTER TABLE users ADD COLUMN status TEXT DEFAULT 'active'`); } catch {}
+  try { db.exec(`ALTER TABLE users ADD COLUMN must_change_password INTEGER DEFAULT 0`); } catch {}
+  try { db.exec(`ALTER TABLE users ADD COLUMN last_login_at TEXT`); } catch {}
+  try { db.exec(`ALTER TABLE users ADD COLUMN is_deleted INTEGER DEFAULT 0`); } catch {}
   try { db.exec(`ALTER TABLE campaigns ADD COLUMN created_by TEXT`); } catch {}
   try { db.exec(`ALTER TABLE campaigns ADD COLUMN creator_email TEXT`); } catch {}
   try { db.exec(`ALTER TABLE ad_units ADD COLUMN network_code TEXT`); } catch {}
@@ -248,6 +267,8 @@ export function initDatabase() {
         now,
         now
       );
+    } else {
+      db.prepare("UPDATE users SET is_deleted = 0, status = 'active' WHERE id = ?").run(blinkUser.id);
     }
 
     // 3. Seed or update The Federal Partner Demo (Scoped strictly to The Federal 22665183713)
@@ -271,6 +292,8 @@ export function initDatabase() {
         now,
         now
       );
+    } else {
+      db.prepare("UPDATE users SET is_deleted = 0, status = 'active' WHERE id = ?").run(federalUser.id);
     }
   } catch (err) {
     console.error('Error seeding demo users:', err);
@@ -367,7 +390,9 @@ export function initDatabase() {
       { id: 'ADU-fed-01', name: 'The Federal Header 970x90', code: 'thefederal_header_970x90', networkCode: '22665183713', sizes: [{ width: 970, height: 90 }] },
       { id: 'ADU-fed-02', name: 'The Federal Homepage 728x90', code: 'thefederal_homepage_728x90', networkCode: '22665183713', sizes: [{ width: 728, height: 90 }] },
       { id: 'ADU-fed-03', name: 'The Federal Mobile HP 320x50', code: 'thefederal_hp_320x50', networkCode: '22665183713', sizes: [{ width: 320, height: 50 }] },
-      { id: 'ADU-fed-04', name: 'The Federal Category 250x250', code: 'thefederal_cat_250x250', networkCode: '22665183713', sizes: [{ width: 250, height: 250 }] }
+      { id: 'ADU-fed-04', name: 'The Federal Category 250x250', code: 'thefederal_cat_250x250', networkCode: '22665183713', sizes: [{ width: 250, height: 250 }] },
+      // Default Global Ad Unit (Admin Only)
+      { id: 'ADU-global-default', name: 'Global Default Slot 300x250', code: 'global_default_slot_300x250', networkCode: null, sizes: [{ width: 300, height: 250 }] }
     ];
     for (const unit of defaultAdUnits) {
       const existing: any = db.prepare('SELECT id FROM ad_units WHERE code = ?').get(unit.code);
@@ -376,10 +401,16 @@ export function initDatabase() {
           INSERT INTO ad_units (id, name, code, google_ad_unit_id, parent_google_ad_unit_id, sizes, status, network_code, created_at, updated_at)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).run(unit.id, unit.name, unit.code, null, null, JSON.stringify(unit.sizes), 'ACTIVE', unit.networkCode, now, now);
-      } else {
+      } else if (unit.networkCode) {
         db.prepare('UPDATE ad_units SET network_code = ? WHERE code = ?').run(unit.networkCode, unit.code);
       }
     }
+
+    // Map historical ad units created during campaigns to their matching partner networks
+    db.prepare("UPDATE ad_units SET network_code = '22212039110' WHERE (code LIKE 'newstrack_%' OR code LIKE 'godad_%') AND (network_code IS NULL OR network_code = '')").run();
+    db.prepare("UPDATE ad_units SET network_code = '22671723195' WHERE code LIKE 'pappu_%' AND (network_code IS NULL OR network_code = '')").run();
+    db.prepare("UPDATE ad_units SET network_code = '310443190' WHERE code LIKE 'hans_%' AND (network_code IS NULL OR network_code = '')").run();
+    db.prepare("UPDATE ad_units SET network_code = '22068249324' WHERE (code LIKE 'aaaaaaa_%' OR code LIKE 'testing_%') AND (network_code IS NULL OR network_code = '')").run();
   } catch (err) {
     console.error('Error seeding default ad units:', err);
   }
