@@ -23,6 +23,7 @@ export class GoogleAdManagerCreativeService {
   ): Promise<{ success: boolean; id?: string; error?: string; googleError?: string; suggestedAction?: string }> {
     const token = await GoogleAdManagerAuthService.getAccessToken();
     const cleanTargetUrl = params.targetUrl.replace(/&/g, '&amp;');
+    const cleanAdvertiserId = String(params.advertiserId || '').replace(/^ADV-/, '').trim();
 
     // Fetch image asset as base64 bytes for reliable GAM asset upload
     let assetXml = '';
@@ -46,7 +47,7 @@ export class GoogleAdManagerCreativeService {
     const bodyXml = `
       <ns:createCreatives>
         <ns:creatives xsi:type="ns:ImageCreative">
-          <ns:advertiserId>${params.advertiserId}</ns:advertiserId>
+          <ns:advertiserId>${cleanAdvertiserId}</ns:advertiserId>
           <ns:name>${params.name}</ns:name>
           <ns:size>
             <ns:width>${params.size.width}</ns:width>
@@ -108,11 +109,12 @@ export class GoogleAdManagerCreativeService {
     if (isDryRun) return null;
     const token = await GoogleAdManagerAuthService.getAccessToken();
     const cleanName = name.replace(/'/g, "\\'");
+    const cleanAdvertiserId = String(advertiserId || '').replace(/^ADV-/, '').trim();
 
     const bodyXml = `
       <ns:getCreativesByStatement>
         <ns:filterStatement>
-          <ns:query>WHERE advertiserId = ${advertiserId} AND name = '${cleanName}' LIMIT 1</ns:query>
+          <ns:query>WHERE advertiserId = ${cleanAdvertiserId} AND name = '${cleanName}' LIMIT 1</ns:query>
         </ns:filterStatement>
       </ns:getCreativesByStatement>
     `;

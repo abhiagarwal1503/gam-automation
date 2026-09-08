@@ -286,8 +286,10 @@ export const CreateCampaignPage: React.FC<CreateCampaignPageProps> = ({ onSucces
         api.getAdvertisers(cleanCode)
       ]);
       const gamList = gamRes.status === 'fulfilled' && Array.isArray(gamRes.value) ? gamRes.value : [];
-      const dbList = dbRes.status === 'fulfilled' && Array.isArray(dbRes.value) ? dbRes.value.map(a => ({ id: a.id, name: a.name })) : [];
-      const baseList = NETWORK_ADVERTISERS[cleanCode] || [];
+      const dbList = dbRes.status === 'fulfilled' && Array.isArray(dbRes.value)
+        ? dbRes.value.map(a => ({ id: a.googleAdvertiserId || a.id.replace(/^ADV-/, ''), name: a.name }))
+        : [];
+      const baseList = (NETWORK_ADVERTISERS[cleanCode] || []).map(a => ({ id: String(a.id).replace(/^ADV-/, ''), name: a.name }));
 
       const mergedMap = new Map<string, { id: string; name: string }>();
       baseList.forEach(a => mergedMap.set(a.name.toLowerCase(), a));
@@ -575,7 +577,7 @@ export const CreateCampaignPage: React.FC<CreateCampaignPageProps> = ({ onSucces
       const result = await api.createCampaign({
         advertiserName: advertiserQuery.trim(),
         customName: customName.trim() || undefined,
-        advertiserId: selectedAdvertiserId || undefined,
+        advertiserId: selectedAdvertiserId ? String(selectedAdvertiserId).replace(/^ADV-/, '').trim() : undefined,
         networkCode: selectedNetwork.code,
         bannerUrl: payloadBannerUrl,
         targetUrl: targetUrl.trim(),

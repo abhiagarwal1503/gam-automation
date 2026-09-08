@@ -62,12 +62,13 @@ export class GoogleAdManagerOrderService {
     isDryRun: boolean = false
   ): Promise<{ success: boolean; id?: string; error?: string; googleError?: string; suggestedAction?: string }> {
     const token = await GoogleAdManagerAuthService.getAccessToken();
+    const cleanAdvertiserId = String(googleAdvertiserId || '').replace(/^ADV-/, '').trim();
 
     const bodyXml = `
       <ns:createOrders>
         <ns:orders>
           <ns:name>${name}</ns:name>
-          <ns:advertiserId>${googleAdvertiserId}</ns:advertiserId>
+          <ns:advertiserId>${cleanAdvertiserId}</ns:advertiserId>
           <ns:traffickerId>${traffickerId}</ns:traffickerId>
         </ns:orders>
       </ns:createOrders>

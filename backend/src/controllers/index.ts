@@ -221,10 +221,12 @@ export const campaignController = {
       const createdBy = authUser ? `${authUser.name} (${authUser.email})` : (req.body.createdBy || 'Direct Automated Booking');
       const creatorEmail = authUser ? authUser.email : (req.body.creatorEmail || undefined);
 
+      const cleanAdvId = advertiserId ? String(advertiserId).replace(/^ADV-/, '').trim() : undefined;
+
       const campaign = await CampaignWorkflowService.createAndRunCampaign({
         advertiserName,
         customName: customName || undefined,
-        advertiserId: advertiserId || undefined,
+        advertiserId: cleanAdvId,
         networkCode: effectiveNetworkCode || undefined,
         bannerUrl,
         targetUrl,
@@ -315,7 +317,7 @@ export const campaignController = {
     try {
       const campaignId = getParam(req.params.id);
       const { banners, defaultBannerUrl } = req.body;
-      // banners is an optional map: { "300x250": dataUrlOrUrl, "728x90": dataUrlOrUrl }
+      // banners is a map: { "300x250": dataUrlOrUrl, "728x90": dataUrlOrUrl, ... }
 
       const campaign = campaignRepo.findById(campaignId);
       if (!campaign) {
@@ -324,16 +326,46 @@ export const campaignController = {
 
       const order = orderRepo.findByCampaignId(campaignId);
       const lineItems = lineItemRepo.findByCampaignId(campaignId);
-      const creatives = creativeRepo.findByCampaignId(campaignId);
+      let creatives = creativeRepo.findByCampaignId(campaignId);
       const advertiser = advertiserRepo.findByName(campaign.advertiserName);
-      const googleAdvertiserId = campaign.advertiserId || advertiser?.googleAdvertiserId;
+      let googleAdvertiserId = advertiser?.googleAdvertiserId || (campaign as any).gamAdvertiserId || campaign.advertiserId;
+      if (googleAdvertiserId) {
+        googleAdvertiserId = String(googleAdvertiserId).replace(/^ADV-/, '').trim();
+      }
+
+      const campaignSizes = campaign.sizes && campaign.sizes.length > 0
+        ? campaign.sizes
+        : [{ width: 300, height: 250 }];
+
+      // If no creative records currently exist in local DB for this campaign, initialize them
+      if (creatives.length === 0) {
+        for (const sz of campaignSizes) {
+          const sizeKey = `${sz.width}x${sz.height}`;
+          const initialUrl = (banners && (banners[sizeKey] || banners[sz.width + 'x' + sz.height])) || defaultBannerUrl || campaign.bannerUrl;
+          const matchedLi = lineItems.find(li => `${li.size.width}x${li.size.height}` === sizeKey) || (lineItems.length > 0 ? lineItems[0] : null);
+          const newCreative = creativeRepo.create({
+            id: `CRE-${Date.now().toString().slice(-6)}-${sizeKey}`,
+            campaignId: campaign.id,
+            lineItemId: matchedLi ? matchedLi.id : undefined,
+            name: `${campaign.advertiserName.toLowerCase().replace(/[^a-z0-9]/g, '_')}_${sizeKey}`,
+            bannerUrl: initialUrl,
+            targetUrl: campaign.targetUrl,
+            width: sz.width,
+            height: sz.height,
+            status: 'ACTIVE',
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+          });
+          creatives.push(newCreative);
+        }
+      }
 
       const updatedCreatives: any[] = [];
       const isDryRun = campaign.isDryRun;
 
       for (const cr of creatives) {
         const sizeKey = `${cr.width}x${cr.height}`;
-        const newBannerUrl = (banners && banners[sizeKey]) || defaultBannerUrl || banners?.default;
+        const newBannerUrl = (banners && (banners[sizeKey] || banners[cr.id])) || defaultBannerUrl || banners?.default;
 
         if (!newBannerUrl) continue;
 
@@ -357,17 +389,15 @@ export const campaignController = {
             newGoogleCreativeId = createRes.id;
 
             // Associate with matching line item in GAM
-            if (cr.lineItemId) {
-              const matchedLineItem = lineItems.find(li => li.id === cr.lineItemId || `${li.size.width}x${li.size.height}` === sizeKey);
-              if (matchedLineItem && matchedLineItem.googleLineItemId) {
-                await GoogleAdManagerAssociationService.associateCreativeWithLineItem(
-                  matchedLineItem.googleLineItemId,
-                  newGoogleCreativeId,
-                  (campaign as any).networkCode || config.gam.networkCode,
-                  campaign.id,
-                  false
-                );
-              }
+            const matchedLineItem = lineItems.find(li => li.id === cr.lineItemId || `${li.size.width}x${li.size.height}` === sizeKey);
+            if (matchedLineItem && matchedLineItem.googleLineItemId) {
+              await GoogleAdManagerAssociationService.associateCreativeWithLineItem(
+                matchedLineItem.googleLineItemId,
+                newGoogleCreativeId,
+                (campaign as any).networkCode || config.gam.networkCode,
+                campaign.id,
+                false
+              );
             }
           }
         }
@@ -383,15 +413,20 @@ export const campaignController = {
       }
 
       // Also update campaign primary bannerUrl if provided
-      if (defaultBannerUrl || (banners && Object.values(banners)[0])) {
-        const primaryUrl = defaultBannerUrl || Object.values(banners)[0];
+      const primaryUrl = defaultBannerUrl || (banners && Object.values(banners)[0]);
+      if (primaryUrl) {
         db.prepare('UPDATE campaigns SET banner_url = ?, updated_at = ? WHERE id = ?')
           .run(String(primaryUrl), new Date().toISOString(), campaignId);
       }
 
+      // Automatically sync updated creatives to active CMS partners (e.g. Hocalwire / The Federal staging)
+      CmsSyncService.syncCampaign(campaignId).catch(err => {
+        console.warn('CMS sync notification after banner replacement:', err.message);
+      });
+
       return res.json({
         success: true,
-        message: `Updated banner images across ${updatedCreatives.length} ad format(s) in GAM!`,
+        message: `Successfully updated and replaced ${updatedCreatives.length} banner creative(s)!`,
         data: updatedCreatives
       });
     } catch (err: any) {

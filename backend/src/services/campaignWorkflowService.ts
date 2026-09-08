@@ -154,7 +154,17 @@ export class CampaignWorkflowService {
       // If the user selected an existing GAM advertiser from the dropdown, use it directly
       const gamAdvertiserIdHint = (campaign as any).gamAdvertiserId;
       if (gamAdvertiserIdHint) {
-        googleAdvertiserId = gamAdvertiserIdHint;
+        googleAdvertiserId = String(gamAdvertiserIdHint).replace(/^ADV-/, '').trim();
+      }
+
+      // If advertiser record has googleAdvertiserId or id starting with ADV-, strip prefix
+      if (googleAdvertiserId) {
+        googleAdvertiserId = String(googleAdvertiserId).replace(/^ADV-/, '').trim();
+      } else if (advertiser && advertiser.id.startsWith('ADV-')) {
+        const candidate = advertiser.id.replace(/^ADV-/, '').trim();
+        if (/^\d+$/.test(candidate)) {
+          googleAdvertiserId = candidate;
+        }
       }
 
       if (!advertiser) {
@@ -166,6 +176,8 @@ export class CampaignWorkflowService {
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString()
         });
+      } else if (googleAdvertiserId && !advertiser.googleAdvertiserId) {
+        advertiserRepo.updateGoogleId(advertiser.id, googleAdvertiserId);
       }
       campaignRepo.updateAdvertiserId(campaignId, advertiser.id);
 
