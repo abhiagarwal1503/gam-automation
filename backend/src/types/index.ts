@@ -173,6 +173,10 @@ export interface SystemSettings {
   googleClientId?: string;
   googleClientSecret?: string;
   googleRefreshToken?: string;
+  hasServiceAccount?: boolean;
+  serviceAccountEmail?: string;
+  serviceAccountProjectId?: string;
+  serviceAccountKey?: string;
 }
 
 export interface CreateCampaignInput {

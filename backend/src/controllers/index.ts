@@ -535,10 +535,15 @@ export const settingsController = {
   async get(req: Request, res: Response) {
     try {
       const settings = settingsRepo.get() || {};
-      // Never send clientSecret in plaintext
+      const serviceAccount = GoogleAdManagerAuthService.getServiceAccount();
+      // Never send clientSecret or private key in plaintext
       const safeSettings = {
         ...settings,
         googleClientSecret: settings.googleClientSecret ? '********' : '',
+        serviceAccountKey: undefined,
+        hasServiceAccount: Boolean(serviceAccount?.client_email && serviceAccount?.private_key),
+        serviceAccountEmail: serviceAccount?.client_email || null,
+        serviceAccountProjectId: serviceAccount?.project_id || null,
         isConnected: GoogleAdManagerAuthService.isConnected()
       };
       return res.json({ success: true, data: safeSettings });
@@ -558,8 +563,44 @@ export const settingsController = {
       if (req.body.googleClientSecret === '********' || !req.body.googleClientSecret) {
         updated.googleClientSecret = current.googleClientSecret;
       }
+      // Handle service account key update / removal
+      if (req.body.serviceAccountKey !== undefined) {
+        if (!req.body.serviceAccountKey || req.body.serviceAccountKey === 'REMOVE') {
+          delete updated.serviceAccountKey;
+        } else {
+          try {
+            const parsed = typeof req.body.serviceAccountKey === 'string'
+              ? JSON.parse(req.body.serviceAccountKey)
+              : req.body.serviceAccountKey;
+            if (!parsed.client_email || !parsed.private_key) {
+              return res.status(400).json({
+                success: false,
+                error: 'Invalid Service Account JSON: "client_email" and "private_key" are required.'
+              });
+            }
+            updated.serviceAccountKey = JSON.stringify(parsed);
+          } catch (e: any) {
+            return res.status(400).json({
+              success: false,
+              error: 'Invalid Service Account JSON format: ' + e.message
+            });
+          }
+        }
+      }
+
       settingsRepo.save(updated);
-      return res.json({ success: true, data: updated });
+
+      const serviceAccount = GoogleAdManagerAuthService.getServiceAccount();
+      const safeUpdated = {
+        ...updated,
+        googleClientSecret: updated.googleClientSecret ? '********' : '',
+        serviceAccountKey: undefined,
+        hasServiceAccount: Boolean(serviceAccount?.client_email && serviceAccount?.private_key),
+        serviceAccountEmail: serviceAccount?.client_email || null,
+        serviceAccountProjectId: serviceAccount?.project_id || null,
+        isConnected: GoogleAdManagerAuthService.isConnected()
+      };
+      return res.json({ success: true, data: safeUpdated });
     } catch (err: any) {
       return res.status(500).json({ success: false, error: err.message });
     }

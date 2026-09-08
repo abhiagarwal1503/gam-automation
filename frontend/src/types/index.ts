@@ -160,6 +160,10 @@ export interface SystemSettings {
   emailWebhookUrl?: string;
   alertEmailRecipient?: string;
   webhooksEnabled?: boolean;
+  hasServiceAccount?: boolean;
+  serviceAccountEmail?: string;
+  serviceAccountProjectId?: string;
+  serviceAccountKey?: string;
 }
 
 export interface User {

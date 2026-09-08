@@ -11,17 +11,19 @@ export const testConnectionController = async (req: Request, res: Response) => {
     const serviceAccount = GoogleAdManagerAuthService.getServiceAccount();
 
     if (!serviceAccount && !settings.googleRefreshToken) {
-      return res.status(400).json({
+      return res.status(200).json({
         success: false,
-        error: 'No Service Account key or OAuth credentials found.'
+        error: 'No Service Account key or OAuth credentials found.',
+        suggestedAction: 'Please upload your Google Cloud Service Account JSON key in the settings panel below, paste the JSON key, or configure GOOGLE_APPLICATION_CREDENTIALS.'
       });
     }
 
     const token = await GoogleAdManagerAuthService.getAccessToken();
     if (!token) {
-      return res.status(401).json({
+      return res.status(200).json({
         success: false,
-        error: 'Failed to generate OAuth2 Access Token from Service Account.'
+        error: 'Failed to generate OAuth2 Access Token from Service Account.',
+        suggestedAction: 'Verify that your Service Account key contains a valid "private_key" and "client_email", and that your system clock is accurate.'
       });
     }
 
@@ -47,11 +49,12 @@ export const testConnectionController = async (req: Request, res: Response) => {
         }
       });
     } else {
+      const saEmail = serviceAccount?.client_email || 'your Service Account';
       return res.status(200).json({
         success: false,
         error: soapRes.error || 'Failed to connect to GAM network.',
         googleError: soapRes.googleError,
-        suggestedAction: soapRes.suggestedAction || 'Ensure dfp-adsaccount@ga-integration-in-cms-365510.iam.gserviceaccount.com is added as a user in GAM Admin > Users, and API Access is enabled.'
+        suggestedAction: soapRes.suggestedAction || `Ensure ${saEmail} is added as a user in GAM Admin > Access & authorization > Users, with Trafficker or Administrator role, and API Access is enabled in GAM Network Settings.`
       });
     }
   } catch (err: any) {

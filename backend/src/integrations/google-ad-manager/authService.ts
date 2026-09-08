@@ -36,15 +36,27 @@ export class GoogleAdManagerAuthService {
       path.resolve(process.cwd(), 'config/service-account.json')
     ];
 
+    if (config.gam.serviceAccountKeyPath) {
+      candidatePaths.unshift(path.resolve(config.gam.serviceAccountKeyPath));
+    }
+
     for (const p of candidatePaths) {
       if (fs.existsSync(p)) {
         try {
           const content = fs.readFileSync(p, 'utf8');
           return JSON.parse(content);
         } catch (err) {
-          console.warn('Could not read service-account.json at', p, err);
+          console.warn('Could not read service account file at', p, err);
         }
       }
+    }
+
+    // 3. Check environment variables GAM_SERVICE_ACCOUNT_JSON or GAM_SERVICE_ACCOUNT_KEY
+    const envJson = process.env.GAM_SERVICE_ACCOUNT_JSON || process.env.GAM_SERVICE_ACCOUNT_KEY;
+    if (envJson) {
+      try {
+        return JSON.parse(envJson);
+      } catch {}
     }
 
     return null;
