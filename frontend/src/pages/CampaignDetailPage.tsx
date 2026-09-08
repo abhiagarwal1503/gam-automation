@@ -138,8 +138,8 @@ export const CampaignDetailPage: React.FC<CampaignDetailPageProps> = ({ campaign
             <ArrowLeft className="w-4 h-4" />
           </button>
           <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-2xl font-bold text-slate-900">{campaign.advertiserName}</h1>
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="text-xl sm:text-2xl font-bold text-slate-900">{campaign.advertiserName}</h1>
               <span className="font-mono text-xs text-slate-400 bg-slate-100 px-2 py-0.5 rounded">
                 {campaign.id}
               </span>
@@ -172,7 +172,7 @@ export const CampaignDetailPage: React.FC<CampaignDetailPageProps> = ({ campaign
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <button
             onClick={fetchCampaign}
             className="p-2 rounded-xl bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 transition"
@@ -184,20 +184,20 @@ export const CampaignDetailPage: React.FC<CampaignDetailPageProps> = ({ campaign
           <button
             onClick={handleSyncToCms}
             disabled={syncingCms}
-            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 text-xs font-semibold shadow-xs transition disabled:opacity-50"
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 text-xs font-semibold shadow-xs transition disabled:opacity-50"
             title="Push generated GPT tags to configured CMS partner"
           >
             <Globe className={`w-3.5 h-3.5 ${syncingCms ? 'animate-spin' : ''}`} />
-            {syncingCms ? 'Pushing to CMS...' : 'Sync to Partner CMS'}
+            {syncingCms ? 'Syncing...' : 'Sync to CMS'}
           </button>
 
           <button
             onClick={() => setIsBannerModalOpen(true)}
-            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white hover:from-blue-700 hover:to-indigo-700 text-xs font-semibold shadow-sm transition"
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white hover:from-blue-700 hover:to-indigo-700 text-xs font-semibold shadow-sm transition"
             title="Bulk upload new replacement banner images across all formats"
           >
             <Upload className="w-3.5 h-3.5" />
-            Change / Upload Banners
+            Upload Banners
           </button>
 
           {campaign.status === 'READY' && (
@@ -224,10 +224,10 @@ export const CampaignDetailPage: React.FC<CampaignDetailPageProps> = ({ campaign
             <button
               onClick={handleRetry}
               disabled={retrying}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold shadow-sm transition disabled:opacity-50"
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold shadow-sm transition disabled:opacity-50"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${retrying ? 'animate-spin' : ''}`} />
-              Retry Campaign
+              Retry
             </button>
           )}
 
