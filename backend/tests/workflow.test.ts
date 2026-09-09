@@ -3,12 +3,21 @@ import { campaignRepo, orderRepo, lineItemRepo, creativeRepo, gptTagRepo } from 
 import { initDatabase } from '../src/database/db';
 
 describe('Campaign Workflow Saga & Idempotency', () => {
+  const testCampaignIds: string[] = [];
+
   beforeAll(() => {
     initDatabase();
   });
 
+  afterAll(() => {
+    for (const cid of testCampaignIds) {
+      campaignRepo.delete(cid);
+    }
+  });
+
   test('executes end-to-end campaign creation in dry-run mode', async () => {
     const campaignId = `CMP-TEST-${Date.now()}`;
+    testCampaignIds.push(campaignId);
     const now = new Date().toISOString();
 
     const campaign = campaignRepo.create({
@@ -59,6 +68,7 @@ describe('Campaign Workflow Saga & Idempotency', () => {
 
   test('idempotency: running workflow multiple times reuses existing entities', async () => {
     const campaignId = `CMP-IDEM-${Date.now()}`;
+    testCampaignIds.push(campaignId);
     const now = new Date().toISOString();
 
     const campaign = campaignRepo.create({

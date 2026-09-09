@@ -606,10 +606,9 @@ export const campaignRepo = {
 
   delete(id: string): boolean {
     const info = db.prepare('DELETE FROM campaigns WHERE id = ?').run(id);
-    // Cascade delete associated logs and tags
+    // Cascade delete associated logs, tags, creatives, line items, and orders
     try {
       db.prepare('DELETE FROM gpt_tags WHERE campaign_id = ?').run(id);
-      db.prepare('DELETE FROM creative_associations WHERE campaign_id = ?').run(id);
       db.prepare('DELETE FROM creatives WHERE campaign_id = ?').run(id);
       db.prepare('DELETE FROM line_items WHERE campaign_id = ?').run(id);
       db.prepare('DELETE FROM orders WHERE campaign_id = ?').run(id);
