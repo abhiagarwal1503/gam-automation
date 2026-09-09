@@ -12,7 +12,7 @@ export interface SEOProps {
 const DEFAULT_TITLE = 'Google Ad Manager Automation | Enterprise Ad Trafficking Platform';
 const DEFAULT_DESCRIPTION =
   'Automate your Google Ad Manager operations. Instantly create Orders, Line Items, Creatives, LICAs, and production-ready GPT snippet tags with multi-network and advertiser scoping.';
-const BASE_URL = 'https://gam-automation.example.com';
+const BASE_URL = typeof window !== 'undefined' ? window.location.origin : 'https://dfp.blinkcms.ai';
 
 export const SEO: React.FC<SEOProps> = ({
   title,
@@ -24,7 +24,7 @@ export const SEO: React.FC<SEOProps> = ({
 }) => {
   useEffect(() => {
     // 1. Update Document Title
-    const formattedTitle = title ? `${title} | GAM Automation` : DEFAULT_TITLE;
+    const formattedTitle = title ? `${title} | BlinkCMS DFP` : DEFAULT_TITLE;
     document.title = formattedTitle;
 
     // Helper: update or create meta tag

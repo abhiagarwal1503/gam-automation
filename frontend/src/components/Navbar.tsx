@@ -286,7 +286,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 </button>
 
                 {toolsDropdownOpen && (
-                  <div className={`absolute left-0 mt-2.5 ${isAdmin ? 'w-[580px] xl:w-[640px]' : 'w-80'} bg-white border border-slate-200/95 rounded-2xl shadow-2xl z-50 animate-fade-in overflow-hidden divide-y divide-slate-100`}>
+                  <div className={`absolute left-0 mt-2.5 ${desktopAnalyticsTools.some(t => !t.adminOnly || isAdmin) ? 'w-[580px] xl:w-[640px]' : 'w-80'} bg-white border border-slate-200/95 rounded-2xl shadow-2xl z-50 animate-fade-in overflow-hidden divide-y divide-slate-100`}>
                     {/* Header Banner */}
                     <div className="px-4 py-3 bg-gradient-to-r from-slate-50 via-blue-50/40 to-indigo-50/30 flex items-center justify-between">
                       <div className="flex items-center gap-2.5">
@@ -304,7 +304,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                     </div>
 
                     {/* Subcategories */}
-                    <div className={`p-3.5 ${isAdmin ? 'grid grid-cols-2 gap-4' : 'space-y-1'}`}>
+                    <div className={`p-3.5 ${desktopAnalyticsTools.some(t => !t.adminOnly || isAdmin) ? 'grid grid-cols-2 gap-4' : 'space-y-1'}`}>
                       {/* Subcategory 1: Inventory & Tagging */}
                       <div className="space-y-1">
                         <div className="flex items-center justify-between px-2.5 py-1 bg-slate-50 rounded-lg border border-slate-100 mb-1.5">
@@ -359,7 +359,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                       </div>
 
                       {/* Subcategory 2: Delivery & Analytics */}
-                      {isAdmin && (
+                      {desktopAnalyticsTools.filter(t => !t.adminOnly || isAdmin).length > 0 && (
                         <div className="space-y-1">
                           <div className="flex items-center justify-between px-2.5 py-1 bg-slate-50 rounded-lg border border-slate-100 mb-1.5">
                             <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-600 flex items-center gap-1.5">
@@ -369,7 +369,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                             <span className="text-[9px] font-mono text-slate-400 font-bold">Reports</span>
                           </div>
 
-                          {desktopAnalyticsTools.map(tool => {
+                          {desktopAnalyticsTools.filter(t => !t.adminOnly || isAdmin).map(tool => {
                             const Icon = tool.icon;
                             const isSelected = activeTab === tool.id;
                             return (

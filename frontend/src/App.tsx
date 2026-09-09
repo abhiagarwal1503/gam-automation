@@ -14,6 +14,7 @@ import { ReportsPage } from './pages/ReportsPage';
 import { ForecasterPage } from './pages/ForecasterPage';
 import { LogsPage } from './pages/LogsPage';
 import { SettingsPage } from './pages/SettingsPage';
+import { NotFoundPage } from './pages/NotFoundPage';
 import { PasswordChangeModal } from './components/PasswordChangeModal';
 import { SEO } from './components/SEO';
 import { api } from './services/api';
@@ -36,7 +37,7 @@ const TAB_SEO_CONFIG: Record<
     breadcrumbs: [{ name: 'Dashboard', item: '/dashboard' }]
   },
   campaigns: {
-    title: 'Campaign Management',
+    title: 'Campaign Dashboard',
     description: 'Browse, manage, and filter automated advertising campaigns across multi-network publishers and advertisers.',
     canonicalPath: '/campaigns',
     breadcrumbs: [{ name: 'Campaigns', item: '/campaigns' }]
@@ -98,18 +99,168 @@ const TAB_SEO_CONFIG: Record<
     canonicalPath: '/settings',
     robots: 'noindex, nofollow',
     breadcrumbs: [{ name: 'Admin', item: '/settings' }, { name: 'Settings', item: '/settings' }]
+  },
+  'not-found': {
+    title: '404 - Page Not Found',
+    description: 'The requested page could not be found on BlinkCMS Google Ad Manager platform.',
+    canonicalPath: '/404',
+    robots: 'noindex, nofollow',
+    breadcrumbs: [{ name: '404', item: '/404' }]
   }
 };
 
+// Route resolver: maps pathname to tab and optional sub-resource (campaignId)
+function getRouteFromPath(pathname: string): { tab: string; campaignId: string | null } {
+  const clean = pathname.split('?')[0].split('#')[0].replace(/\/+$/, '') || '/';
+  const lower = clean.toLowerCase();
+
+  if (lower === '/' || lower === '/dashboard') {
+    return { tab: 'dashboard', campaignId: null };
+  }
+  if (lower === '/login') {
+    return { tab: 'login', campaignId: null };
+  }
+  if (lower === '/404') {
+    return { tab: 'not-found', campaignId: null };
+  }
+
+  // Campaign dashboard aliases: /campaigns, /campaign, /campaingn, /campain, /campaign-dashboard
+  if (
+    lower === '/campaigns' ||
+    lower === '/campaign' ||
+    lower === '/campaingn' ||
+    lower === '/campain' ||
+    lower === '/campaign-dashboard'
+  ) {
+    return { tab: 'campaigns', campaignId: null };
+  }
+
+  // Campaign detail aliases: /campaigns/:id, /campaign/:id, /campaingn/:id
+  if (
+    lower.startsWith('/campaigns/') ||
+    lower.startsWith('/campaign/') ||
+    lower.startsWith('/campaingn/') ||
+    lower.startsWith('/campain/')
+  ) {
+    const parts = clean.split('/').filter(Boolean);
+    const id = parts[1] ? parts[1].trim() : '';
+    return id ? { tab: 'campaign-detail', campaignId: id } : { tab: 'campaigns', campaignId: null };
+  }
+
+  if (lower === '/create' || lower === '/create-campaign') {
+    return { tab: 'create', campaignId: null };
+  }
+  if (lower === '/ad-units' || lower === '/ad-unit' || lower === '/adunits' || lower === '/inventory') {
+    return { tab: 'ad-units', campaignId: null };
+  }
+  if (lower === '/advertisers' || lower === '/advertiser') {
+    return { tab: 'advertisers', campaignId: null };
+  }
+  if (lower === '/reports' || lower === '/report') {
+    return { tab: 'reports', campaignId: null };
+  }
+  if (lower === '/forecaster' || lower === '/forecast') {
+    return { tab: 'forecaster', campaignId: null };
+  }
+  if (lower === '/gpt-generator' || lower === '/gpt') {
+    return { tab: 'gpt-generator', campaignId: null };
+  }
+  if (lower === '/logs' || lower === '/log') {
+    return { tab: 'logs', campaignId: null };
+  }
+  if (lower === '/settings' || lower === '/setting') {
+    return { tab: 'settings', campaignId: null };
+  }
+
+  return { tab: 'not-found', campaignId: null };
+}
+
+// Maps tab and campaignId back to its canonical browser URL
+function getPathFromRoute(tab: string, campaignId?: string | null): string {
+  switch (tab) {
+    case 'dashboard':
+      return '/dashboard';
+    case 'login':
+      return '/login';
+    case 'not-found':
+      return typeof window !== 'undefined' ? window.location.pathname : '/404';
+    case 'campaigns':
+      return '/campaigns';
+    case 'campaign-detail':
+      return campaignId ? `/campaigns/${campaignId}` : '/campaigns';
+    case 'create':
+      return '/create';
+    case 'ad-units':
+      return '/ad-units';
+    case 'advertisers':
+      return '/advertisers';
+    case 'reports':
+      return '/reports';
+    case 'forecaster':
+      return '/forecaster';
+    case 'gpt-generator':
+      return '/gpt-generator';
+    case 'logs':
+      return '/logs';
+    case 'settings':
+      return '/settings';
+    default:
+      return '/dashboard';
+  }
+}
+
 function AppContent() {
   const { user, isAuthenticated, loading, isAdmin } = useAuth();
-  const [activeTab, setActiveTab] = useState<string>('dashboard');
-  const [selectedCampaignId, setSelectedCampaignId] = useState<string | null>(null);
+  
+  // Initialize tab and route from browser URL (e.g. /reports -> reports)
+  const initialRoute = typeof window !== 'undefined' ? getRouteFromPath(window.location.pathname) : { tab: 'dashboard', campaignId: null };
+  const [activeTab, setActiveTabState] = useState<string>(initialRoute.tab);
+  const [selectedCampaignId, setSelectedCampaignId] = useState<string | null>(initialRoute.campaignId);
   const [isGamConnected, setIsGamConnected] = useState<boolean>(false);
 
-  // Admin-only sections guard: Reports, Forecaster, GAM API Logs, Settings, GPT Generator
-  const adminOnlyTabs = ['reports', 'forecaster', 'logs', 'settings', 'gpt-generator'];
+  // Admin-only sections guard: only admins can access GPT Generator, Forecaster, Reports, Settings, Logs
+  const adminOnlyTabs = ['gpt-generator', 'forecaster', 'reports', 'settings', 'logs'];
   const effectiveTab = (!isAdmin && adminOnlyTabs.includes(activeTab)) ? 'dashboard' : activeTab;
+
+  // Unified navigation helper updating both React state and browser URL bar
+  const navigateTo = (tab: string, campaignId: string | null = null, replace = false) => {
+    let targetTab = tab;
+    if (!isAdmin && adminOnlyTabs.includes(tab)) {
+      targetTab = 'dashboard';
+    }
+    setActiveTabState(targetTab);
+    setSelectedCampaignId(campaignId);
+
+    if (typeof window !== 'undefined') {
+      const targetPath = getPathFromRoute(targetTab, campaignId);
+      if (window.location.pathname !== targetPath) {
+        if (replace) {
+          window.history.replaceState({ tab: targetTab, campaignId }, '', targetPath);
+        } else {
+          window.history.pushState({ tab: targetTab, campaignId }, '', targetPath);
+        }
+      }
+    }
+  };
+
+  // Listen to browser Back / Forward history navigation
+  useEffect(() => {
+    const handlePopState = () => {
+      const route = getRouteFromPath(window.location.pathname);
+      setActiveTabState(route.tab);
+      setSelectedCampaignId(route.campaignId);
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  // Sync route URL if admin permission guard changes
+  useEffect(() => {
+    if (activeTab !== effectiveTab) {
+      navigateTo(effectiveTab, null, true);
+    }
+  }, [activeTab, effectiveTab]);
 
   useEffect(() => {
     async function checkStatus() {
@@ -124,13 +275,11 @@ function AppContent() {
   }, []);
 
   const handleSelectCampaign = (id: string) => {
-    setSelectedCampaignId(id);
-    setActiveTab('campaign-detail');
+    navigateTo('campaign-detail', id);
   };
 
   const handleCampaignCreated = (id: string) => {
-    setSelectedCampaignId(id);
-    setActiveTab('campaign-detail');
+    navigateTo('campaign-detail', id);
   };
 
   if (loading) {
@@ -142,8 +291,21 @@ function AppContent() {
     );
   }
 
-  // If user is not logged in, show the proper login dashboard first
+  // If user is not logged in, show 404 for broken links or login page
   if (!isAuthenticated) {
+    if (effectiveTab === 'not-found') {
+      return (
+        <div className="min-h-screen mesh-gradient-bg flex flex-col justify-center">
+          <SEO
+            title="404 - Page Not Found"
+            description="The requested page could not be found on BlinkCMS."
+            canonicalPath="/404"
+            robots="noindex, nofollow"
+          />
+          <NotFoundPage onNavigate={(tab) => navigateTo(tab)} />
+        </div>
+      );
+    }
     return <LoginPage />;
   }
 
@@ -162,14 +324,15 @@ function AppContent() {
 
       {/* Top Navbar */}
       <Navbar
-        activeTab={effectiveTab === 'campaign-detail' ? 'campaigns' : effectiveTab}
+        activeTab={
+          effectiveTab === 'campaign-detail'
+            ? 'campaigns'
+            : effectiveTab === 'not-found'
+            ? ''
+            : effectiveTab
+        }
         setActiveTab={(tab) => {
-          setSelectedCampaignId(null);
-          if (!isAdmin && adminOnlyTabs.includes(tab)) {
-            setActiveTab('dashboard');
-          } else {
-            setActiveTab(tab);
-          }
+          navigateTo(tab, null);
         }}
         isGamConnected={isGamConnected}
       />
@@ -178,7 +341,7 @@ function AppContent() {
       <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 py-5 sm:py-8">
         {effectiveTab === 'dashboard' && (
           <DashboardPage
-            setActiveTab={setActiveTab}
+            setActiveTab={(tab) => navigateTo(tab)}
             onSelectCampaign={handleSelectCampaign}
           />
         )}
@@ -186,7 +349,7 @@ function AppContent() {
         {effectiveTab === 'campaigns' && (
           <CampaignsPage
             onSelectCampaign={handleSelectCampaign}
-            onCreateNew={() => setActiveTab('create')}
+            onCreateNew={() => navigateTo('create')}
           />
         )}
 
@@ -199,7 +362,7 @@ function AppContent() {
         {effectiveTab === 'campaign-detail' && selectedCampaignId && (
           <CampaignDetailPage
             campaignId={selectedCampaignId}
-            onBack={() => setActiveTab('campaigns')}
+            onBack={() => navigateTo('campaigns')}
           />
         )}
 
@@ -211,11 +374,15 @@ function AppContent() {
 
         {effectiveTab === 'forecaster' && isAdmin && <ForecasterPage />}
 
-        {effectiveTab === 'gpt-generator' && <GptGeneratorPage />}
+        {effectiveTab === 'gpt-generator' && isAdmin && <GptGeneratorPage />}
 
         {effectiveTab === 'logs' && isAdmin && <LogsPage />}
 
         {effectiveTab === 'settings' && isAdmin && <SettingsPage />}
+
+        {effectiveTab === 'not-found' && (
+          <NotFoundPage onNavigate={(tab) => navigateTo(tab)} />
+        )}
       </main>
 
       {/* Mandatory Password Change Enforcer Modal */}
