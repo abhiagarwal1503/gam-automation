@@ -42,7 +42,7 @@ export function createApp() {
     if (robotsFile) {
       res.type('text/plain').sendFile(robotsFile);
     } else {
-      res.type('text/plain').send('User-agent: *\nAllow: /\nDisallow: /api/\nSitemap: https://gam-automation.example.com/sitemap.xml\n');
+      res.type('text/plain').send('User-agent: *\nAllow: /\nDisallow: /api/\nSitemap: https://dfp.blinkcms.ai/sitemap.xml\n');
     }
   });
 

@@ -26,4 +26,4 @@ Disallow: /api/live/
 Crawl-delay: 1
 
 # Search engine sitemap location
-Sitemap: https://gam-automation.example.com/sitemap.xml
+Sitemap: https://dfp.blinkcms.ai/sitemap.xml
