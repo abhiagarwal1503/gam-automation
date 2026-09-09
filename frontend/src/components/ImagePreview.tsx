@@ -101,16 +101,16 @@ export const ImagePreview: React.FC<ImagePreviewProps> = ({
       </div>
 
       {/* Footer Info */}
-      <div className="flex items-center justify-between text-xs text-slate-600 bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 text-xs text-slate-600 bg-slate-50 p-2.5 rounded-xl border border-slate-100">
         <div className="flex items-center gap-1.5 text-emerald-700 font-medium">
-          <CheckCircle className="w-4 h-4 text-emerald-600" />
+          <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
           {activeTab === 'original' ? (
             <span>Original image ready</span>
           ) : (
-            <span>Auto-scaled to exact Google Ad Manager dimensions ({currentSizeObj?.width}×{currentSizeObj?.height}px)</span>
+            <span className="truncate">Auto-scaled to exact GAM dimensions ({currentSizeObj?.width}×{currentSizeObj?.height}px)</span>
           )}
         </div>
-        <span className="text-[11px] text-slate-400 font-mono">
+        <span className="text-[11px] text-slate-400 font-mono shrink-0">
           Ready for Creative upload
         </span>
       </div>

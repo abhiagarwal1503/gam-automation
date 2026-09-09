@@ -632,37 +632,37 @@ export const CreateCampaignPage: React.FC<CreateCampaignPageProps> = ({ onSucces
   };
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
+    <div className="max-w-4xl mx-auto space-y-4 sm:space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
-            <Megaphone className="w-6 h-6 text-blue-600" />
-            Create Advertisement Campaign
+          <h1 className="text-xl sm:text-2xl font-black text-slate-900 flex items-center gap-2">
+            <Megaphone className="w-5 h-5 sm:w-6 sm:h-6 text-blue-600 shrink-0" />
+            <span>Create Advertisement Campaign</span>
           </h1>
-          <p className="text-sm text-slate-500">
+          <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
             Book ads directly into Google Ad Manager for the selected network.
           </p>
         </div>
         <button
           type="button"
           onClick={setDemoData}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-lg transition self-start sm:self-auto"
+          className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-xl transition self-start sm:self-auto shrink-0 shadow-2xs"
           title={`Fill sample campaign data for ${isPartnerScoped ? (user?.partnerName || 'Partner') : (selectedNetwork?.name || 'selected network')}`}
         >
-          <Sparkles className="w-3.5 h-3.5" />
-          Fill Demo Data {isPartnerScoped && user?.partnerName ? `(${user.partnerName})` : ''}
+          <Sparkles className="w-3.5 h-3.5 shrink-0" />
+          <span>Fill Demo Data</span>
         </button>
       </div>
 
       {/* Account Info Banner - Shows which account is creating this campaign */}
-      <div className="bg-slate-900 text-white rounded-2xl p-4 sm:p-5 shadow-sm border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="flex items-center gap-3.5">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center font-bold text-white shadow-md text-base">
+      <div className="bg-slate-900 text-white rounded-2xl p-4 sm:p-5 shadow-sm border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center font-bold text-white shadow-md text-base shrink-0">
             {user?.name ? user.name.charAt(0).toUpperCase() : 'U'}
           </div>
-          <div>
-            <div className="flex items-center gap-2">
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5 flex-wrap">
               <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Creating Account:</span>
               <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase ${
                 user?.role === 'admin'
@@ -672,21 +672,24 @@ export const CreateCampaignPage: React.FC<CreateCampaignPageProps> = ({ onSucces
                 {user?.role || 'User'}
               </span>
             </div>
-            <div className="font-bold text-sm sm:text-base text-white">
-              {user?.name || 'Current User'} <span className="font-normal text-xs text-slate-400">({user?.email || 'N/A'})</span>
+            <div className="font-bold text-sm sm:text-base text-white truncate">
+              {user?.name || 'Current User'} <span className="font-normal text-xs text-slate-400 hidden sm:inline">({user?.email || 'N/A'})</span>
+            </div>
+            <div className="text-[11px] text-slate-400 font-mono truncate sm:hidden">
+              {user?.email}
             </div>
           </div>
         </div>
 
-        <div className="sm:text-right border-t sm:border-t-0 pt-2 sm:pt-0 border-slate-800 flex sm:flex-col items-center sm:items-end justify-between gap-1">
+        <div className="sm:text-right border-t sm:border-t-0 pt-2.5 sm:pt-0 border-slate-800 flex flex-col sm:items-end gap-1 shrink-0">
           <span className="text-[11px] text-slate-400 font-medium">Mapped Partner Scope:</span>
-          <span className="text-xs font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 rounded-lg">
+          <span className="text-xs font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 rounded-lg truncate max-w-full">
             {user?.networkCode === 'ALL' || !user?.networkCode ? '🌐 All Networks (Global Admin)' : `🏢 ${user?.partnerName || user?.networkCode}`}
           </span>
           {isAdvertiserScoped && (
-            <div className="flex items-center gap-1.5 mt-1">
+            <div className="flex items-center gap-1.5 mt-0.5">
               <span className="text-[11px] text-purple-300 font-medium">Assigned Advertiser:</span>
-              <span className="text-xs font-bold text-purple-300 bg-purple-500/20 border border-purple-500/30 px-2.5 py-0.5 rounded-lg">
+              <span className="text-xs font-bold text-purple-300 bg-purple-500/20 border border-purple-500/30 px-2.5 py-0.5 rounded-lg truncate">
                 🎯 {user?.advertiserName}
               </span>
             </div>
@@ -695,13 +698,13 @@ export const CreateCampaignPage: React.FC<CreateCampaignPageProps> = ({ onSucces
       </div>
 
       {/* Network Selector */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-slate-100">
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 sm:p-5 space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-3 border-b border-slate-100">
           <div className="flex items-center gap-2">
-            <Radio className="w-4 h-4 text-blue-600" />
+            <Radio className="w-4 h-4 text-blue-600 shrink-0" />
             <h2 className="text-sm font-bold text-slate-900">Network Code <span className="text-rose-500">*</span></h2>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap justify-between sm:justify-end">
             {!isPartnerScoped && (
               <button
                 type="button"
@@ -712,11 +715,11 @@ export const CreateCampaignPage: React.FC<CreateCampaignPageProps> = ({ onSucces
               </button>
             )}
             {selectedNetwork ? (
-              <span className="text-xs text-emerald-600 font-semibold bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
+              <span className="text-xs text-emerald-600 font-semibold bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full truncate max-w-[240px] sm:max-w-none" title={`${selectedNetwork.name} (${selectedNetwork.code})`}>
                 {isPartnerScoped ? 'Locked Scope:' : 'Active:'} {selectedNetwork.name} ({selectedNetwork.code})
               </span>
             ) : (
-              <span className="text-xs text-amber-600 font-semibold bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">
+              <span className="text-xs text-amber-600 font-semibold bg-amber-50 border border-amber-200 px-2.5 py-0.5 rounded-full">
                 No network selected
               </span>
             )}
@@ -724,20 +727,20 @@ export const CreateCampaignPage: React.FC<CreateCampaignPageProps> = ({ onSucces
         </div>
 
         {isPartnerScoped ? (
-          <div className="flex items-center gap-3.5 p-4 bg-gradient-to-r from-blue-50/80 to-indigo-50/60 border border-blue-200/80 rounded-2xl text-xs text-blue-900">
-            <div className="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center font-bold shadow-sm">
+          <div className="flex items-center gap-3.5 p-3.5 sm:p-4 bg-gradient-to-r from-blue-50/80 to-indigo-50/60 border border-blue-200/80 rounded-2xl text-xs text-blue-900">
+            <div className="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center font-bold shadow-sm shrink-0">
               <Building2 className="w-5 h-5" />
             </div>
-            <div className="space-y-0.5">
-              <div className="font-bold text-sm text-slate-900">{selectedNetwork?.name || user?.partnerName}</div>
-              <div className="text-slate-500 font-mono text-xs">
-                GAM Network Code: <span className="font-bold text-blue-700">{selectedNetwork?.code || user?.networkCode}</span>
-                <span className="ml-2 text-[11px] px-2 py-0.5 bg-blue-100 text-blue-800 rounded-full font-sans font-medium">Mapped Partner Scope</span>
+            <div className="space-y-0.5 min-w-0">
+              <div className="font-bold text-sm text-slate-900 truncate">{selectedNetwork?.name || user?.partnerName}</div>
+              <div className="text-slate-500 font-mono text-xs flex items-center gap-1.5 flex-wrap">
+                <span>GAM Network Code: <strong className="text-blue-700">{selectedNetwork?.code || user?.networkCode}</strong></span>
+                <span className="text-[11px] px-2 py-0.5 bg-blue-100 text-blue-800 rounded-full font-sans font-medium">Mapped Partner Scope</span>
               </div>
             </div>
           </div>
         ) : isCustomMode ? (
-          <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
+          <div className="bg-slate-50 p-3.5 sm:p-4 rounded-xl border border-slate-200 space-y-3">
             <label className="block text-xs font-bold uppercase text-slate-700">Enter Network Code</label>
             <div className="flex gap-2">
               <input
@@ -756,7 +759,7 @@ export const CreateCampaignPage: React.FC<CreateCampaignPageProps> = ({ onSucces
               <button
                 type="button"
                 onClick={() => handleApplyCustomNetwork()}
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-semibold shadow-sm transition"
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-semibold shadow-sm transition shrink-0"
               >
                 Load Advertisers
               </button>
@@ -766,7 +769,7 @@ export const CreateCampaignPage: React.FC<CreateCampaignPageProps> = ({ onSucces
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-2.5">
             {GAM_NETWORKS.map(net => {
               const isSelected = selectedNetwork?.code === net.code;
               return (
@@ -777,13 +780,13 @@ export const CreateCampaignPage: React.FC<CreateCampaignPageProps> = ({ onSucces
                     setSelectedNetwork(net);
                     setCustomNetworkCode(net.code);
                   }}
-                  className={`text-left px-4 py-3 rounded-xl border text-sm transition-all ${
+                  className={`text-left px-3.5 py-2.5 sm:px-4 sm:py-3 rounded-xl border text-sm transition-all ${
                     isSelected
                       ? 'bg-blue-600 text-white border-blue-600 shadow-md shadow-blue-600/20'
                       : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100 hover:border-slate-300'
                   }`}
                 >
-                  <div className="font-semibold truncate">{net.name}</div>
+                  <div className="font-semibold truncate text-xs sm:text-sm">{net.name}</div>
                   <div className={`text-xs mt-0.5 font-mono ${isSelected ? 'text-blue-100' : 'text-slate-400'}`}>
                     {net.code}
                   </div>
@@ -795,15 +798,15 @@ export const CreateCampaignPage: React.FC<CreateCampaignPageProps> = ({ onSucces
       </div>
 
       {/* Main Form */}
-      <form onSubmit={handleSubmit} className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 sm:p-8 space-y-6">
+      <form onSubmit={handleSubmit} className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 sm:p-6 lg:p-8 space-y-5 sm:space-y-6">
         {error && (
-          <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-sm flex items-start gap-3">
+          <div className="p-3.5 sm:p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-sm flex items-start gap-3">
             <AlertCircle className="w-5 h-5 text-rose-600 mt-0.5 shrink-0" />
             <div>{error}</div>
           </div>
         )}
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
 
           {/* ---- Advertiser / Company Dropdown ---- */}
           <div className="md:col-span-2 space-y-2" ref={dropdownRef}>
@@ -860,16 +863,16 @@ export const CreateCampaignPage: React.FC<CreateCampaignPageProps> = ({ onSucces
                     onClick={() => {
                       if (selectedNetwork) setAdvertiserDropdownOpen(true);
                     }}
-                    className="flex items-center justify-between p-2.5 sm:p-3 rounded-xl border border-emerald-300 bg-gradient-to-r from-emerald-50/80 to-teal-50/40 shadow-xs cursor-pointer hover:border-emerald-400 transition group"
+                    className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-3 p-2.5 sm:p-3 rounded-xl border border-emerald-300 bg-gradient-to-r from-emerald-50/80 to-teal-50/40 shadow-xs cursor-pointer hover:border-emerald-400 transition group"
                   >
                     <div className="flex items-center gap-3 min-w-0">
                       <div className="w-9 h-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs">
                         <Building2 className="w-5 h-5" />
                       </div>
                       <div className="min-w-0">
-                        <div className="text-sm font-bold text-slate-900 flex items-center gap-2 truncate">
+                        <div className="text-sm font-bold text-slate-900 flex items-center gap-2 flex-wrap">
                           <span className="truncate">{advertiserQuery}</span>
-                          <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full border border-emerald-200">
+                          <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full border border-emerald-200 shrink-0">
                             <Check className="w-3 h-3" />
                             Verified in GAM
                           </span>
@@ -879,7 +882,7 @@ export const CreateCampaignPage: React.FC<CreateCampaignPageProps> = ({ onSucces
                         </div>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2 shrink-0 ml-3">
+                    <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
                       <button
                         type="button"
                         onClick={(e) => {
@@ -1152,7 +1155,7 @@ export const CreateCampaignPage: React.FC<CreateCampaignPageProps> = ({ onSucces
                 placeholder="https://example.com/landing-page"
                 value={targetUrl}
                 onChange={(e) => setTargetUrl(e.target.value)}
-                className="w-full pl-10 pr-24 py-3 rounded-xl border border-slate-300 bg-white text-slate-900 font-mono text-sm shadow-xs transition hover:border-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600"
+                className="w-full pl-9 sm:pl-10 pr-20 sm:pr-24 py-2.5 sm:py-3 rounded-xl border border-slate-300 bg-white text-slate-900 font-mono text-xs sm:text-sm shadow-xs transition hover:border-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600"
               />
               <div className="absolute right-2.5 top-1/2 -translate-y-1/2 flex items-center gap-1">
                 {targetUrl && (
@@ -1170,7 +1173,7 @@ export const CreateCampaignPage: React.FC<CreateCampaignPageProps> = ({ onSucces
                     href={targetUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-sans text-xs font-bold transition shadow-xs"
+                    className="inline-flex items-center gap-1 px-2 sm:px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-sans text-xs font-bold transition shadow-xs"
                     title="Test landing page in new tab"
                   >
                     <span>Test</span>
@@ -1183,12 +1186,12 @@ export const CreateCampaignPage: React.FC<CreateCampaignPageProps> = ({ onSucces
             {/* Status & UTM Tag Builder Strip */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs pt-0.5">
               {/* Destination status */}
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-1.5 min-w-0">
                 {targetUrl ? (
                   targetUrl.startsWith('http://') || targetUrl.startsWith('https://') ? (
-                    <span className="text-emerald-700 font-semibold flex items-center gap-1.5">
+                    <span className="text-emerald-700 font-semibold flex items-center gap-1.5 truncate">
                       <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                      <span>
+                      <span className="truncate">
                         Destination: <strong className="font-mono text-slate-800">{targetUrl.replace(/^https?:\/\//, '').split('/')[0]}</strong>
                       </span>
                     </span>
@@ -1196,13 +1199,13 @@ export const CreateCampaignPage: React.FC<CreateCampaignPageProps> = ({ onSucces
                     <span className="text-amber-700 font-medium">⚠️ Tip: include http:// or https://</span>
                   )
                 ) : (
-                  <span className="text-slate-400">Example: https://brand.com/offers or https://yoursite.com/promo</span>
+                  <span className="text-slate-400 truncate">Example: https://brand.com/offers or https://yoursite.com/promo</span>
                 )}
               </div>
 
               {/* One-click UTM Analytics Parameter Appender */}
               {targetUrl && (
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-1.5 shrink-0">
                   {!targetUrl.includes('utm_') ? (
                     <button
                       type="button"
@@ -1211,7 +1214,7 @@ export const CreateCampaignPage: React.FC<CreateCampaignPageProps> = ({ onSucces
                         const campaignSlug = (customName || advertiserQuery || 'gam').toLowerCase().replace(/[^a-z0-9]+/g, '_');
                         setTargetUrl(`${targetUrl}${separator}utm_source=gam&utm_medium=display&utm_campaign=${campaignSlug}`);
                       }}
-                      className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2.5 py-1 rounded-lg transition"
+                      className="inline-flex items-center justify-center gap-1 text-[11px] font-semibold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2.5 py-1 rounded-lg transition w-full sm:w-auto"
                     >
                       <Sparkles className="w-3 h-3 text-emerald-600" />
                       + Append UTM Tags for Analytics
@@ -1270,23 +1273,23 @@ export const CreateCampaignPage: React.FC<CreateCampaignPageProps> = ({ onSucces
             ) : (
               <div className="space-y-3">
                 {/* Active Primary Banner Card */}
-                <div className="flex items-center justify-between p-3.5 bg-blue-50/70 border border-blue-200 rounded-xl">
-                  <div className="flex items-center gap-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 sm:p-3.5 bg-blue-50/70 border border-blue-200 rounded-xl">
+                  <div className="flex items-center gap-3 min-w-0">
                     <div className="w-10 h-10 rounded-lg bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-sm">
                       <FileImage className="w-5 h-5" />
                     </div>
-                    <div>
-                      <div className="text-xs font-bold text-slate-900 truncate max-w-xs sm:max-w-md">
+                    <div className="min-w-0">
+                      <div className="text-xs font-bold text-slate-900 truncate max-w-full">
                         {uploadedFileName || 'Uploaded Banner'}
                       </div>
                       {originalDimensions && (
-                        <div className="text-[11px] text-blue-700 font-medium">
+                        <div className="text-[11px] text-blue-700 font-medium truncate">
                           Active Creative: {originalDimensions.width} × {originalDimensions.height} px • Auto-resizing enabled
                         </div>
                       )}
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
                     <button
                       type="button"
                       onClick={() => fileInputRef.current?.click()}
@@ -1417,15 +1420,15 @@ export const CreateCampaignPage: React.FC<CreateCampaignPageProps> = ({ onSucces
                 const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
                 const isValid = diffDays >= 0;
                 return (
-                  <div className={`p-2.5 rounded-xl text-xs flex items-center justify-between border ${
+                  <div className={`p-2.5 rounded-xl text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 border ${
                     isValid
                       ? 'bg-blue-50/70 border-blue-200 text-blue-900'
                       : 'bg-rose-50 border-rose-200 text-rose-800 font-bold'
                   }`}>
-                    <div className="flex items-center gap-2">
-                      <Clock className="w-3.5 h-3.5 text-blue-600" />
+                    <div className="flex items-center gap-2 min-w-0">
+                      <Clock className="w-3.5 h-3.5 text-blue-600 shrink-0" />
                       {isValid ? (
-                        <span>
+                        <span className="truncate">
                           Flight Duration: <strong>{diffDays === 0 ? '1 Day (Same Day)' : `${diffDays} Days`}</strong> ({startDate} → {endDate})
                         </span>
                       ) : (
@@ -1433,7 +1436,7 @@ export const CreateCampaignPage: React.FC<CreateCampaignPageProps> = ({ onSucces
                       )}
                     </div>
                     {isValid && (
-                      <span className="text-[10px] px-2 py-0.5 rounded-md bg-blue-100 text-blue-700 font-bold uppercase">
+                      <span className="text-[10px] px-2 py-0.5 rounded-md bg-blue-100 text-blue-700 font-bold uppercase shrink-0 self-start sm:self-auto">
                         Sponsorship Priority
                       </span>
                     )}
@@ -1503,7 +1506,7 @@ export const CreateCampaignPage: React.FC<CreateCampaignPageProps> = ({ onSucces
                 value={position}
                 onChange={(e) => setPosition(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '_'))}
                 placeholder="Enter slot name (e.g. homepage, sidebar, article_top)"
-                className="w-full pl-10 pr-10 py-3 rounded-xl border-2 border-slate-300 bg-white text-slate-900 font-mono font-bold text-sm shadow-xs transition hover:border-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600"
+                className="w-full pl-9 sm:pl-10 pr-9 sm:pr-10 py-2.5 sm:py-3 rounded-xl border-2 border-slate-300 bg-white text-slate-900 font-mono font-bold text-xs sm:text-sm shadow-xs transition hover:border-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600"
               />
               {position && (
                 <button
@@ -1573,10 +1576,10 @@ export const CreateCampaignPage: React.FC<CreateCampaignPageProps> = ({ onSucces
         </div>
 
         {/* Submit */}
-        <div className="pt-4 border-t border-slate-100 flex items-center justify-end gap-3">
-          <div className="mr-auto text-xs text-slate-500">
+        <div className="pt-4 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="text-xs text-slate-500 order-2 sm:order-1 truncate">
             {selectedNetwork ? (
-              <>Network: <strong>{selectedNetwork.name}</strong> ({selectedNetwork.code})</>
+              <span>Network: <strong className="text-slate-800 font-semibold">{selectedNetwork.name}</strong> ({selectedNetwork.code})</span>
             ) : (
               <span className="text-amber-600 font-medium">⚠️ No network selected</span>
             )}
@@ -1584,10 +1587,10 @@ export const CreateCampaignPage: React.FC<CreateCampaignPageProps> = ({ onSucces
           <button
             type="submit"
             disabled={loading || advertiserLoading}
-            className="flex items-center gap-2 px-6 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm shadow-md shadow-blue-600/30 transition disabled:opacity-50"
+            className="w-full sm:w-auto order-1 sm:order-2 flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm shadow-md shadow-blue-600/30 transition disabled:opacity-50"
           >
             {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
-            {isDryRun ? 'Dry Run & Generate Tags' : 'Create Campaign in Google Ad Manager'}
+            <span>{isDryRun ? 'Dry Run & Generate Tags' : 'Create Campaign in Google Ad Manager'}</span>
           </button>
         </div>
       </form>
