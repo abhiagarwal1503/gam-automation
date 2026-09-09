@@ -28,8 +28,6 @@ import { useAuth } from '../context/AuthContext';
 
 const GAM_NETWORKS = [
   { name: 'Blinkcorp Technologies Private Limited', code: '22068249324' },
-  { name: 'Dhanam Publications Pvt.', code: '86902771' },
-  { name: 'Gaon Connection', code: '22590922850' },
   { name: 'Hyderabad Media House L.', code: '310443190' },
   { name: 'Illustrated Daily News', code: '22674196146' },
   { name: 'new powergame dot com', code: '22827981500' },

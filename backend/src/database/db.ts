@@ -197,6 +197,29 @@ export function initDatabase() {
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS gam_clients (
+      id TEXT PRIMARY KEY,
+      client_name TEXT NOT NULL,
+      network_code TEXT NOT NULL UNIQUE,
+      gam_network_id TEXT,
+      display_name TEXT,
+      time_zone TEXT DEFAULT 'America/New_York',
+      currency_code TEXT DEFAULT 'USD',
+      effective_root_ad_unit_id TEXT,
+      credentials_type TEXT DEFAULT 'GLOBAL_SERVICE_ACCOUNT',
+      service_account_key TEXT,
+      refresh_token TEXT,
+      client_email TEXT,
+      notes TEXT,
+      status TEXT DEFAULT 'ACTIVE',
+      last_synced_at TEXT,
+      sync_status TEXT DEFAULT 'PENDING',
+      sync_message TEXT,
+      account_info TEXT,
+      created_by TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
   `);
 
   try { db.exec(`ALTER TABLE users ADD COLUMN network_code TEXT`); } catch {}
@@ -211,6 +234,61 @@ export function initDatabase() {
   try { db.exec(`ALTER TABLE campaigns ADD COLUMN creator_email TEXT`); } catch {}
   try { db.exec(`ALTER TABLE ad_units ADD COLUMN network_code TEXT`); } catch {}
   try { db.exec(`ALTER TABLE advertisers ADD COLUMN network_code TEXT`); } catch {}
+  try { db.exec(`ALTER TABLE gam_clients ADD COLUMN effective_root_ad_unit_id TEXT`); } catch {}
+  try { db.exec(`ALTER TABLE gam_clients ADD COLUMN account_info TEXT`); } catch {}
+
+  // Seed default managed GAM clients if none exist
+  try {
+    const existingClientCount = (db.prepare('SELECT COUNT(*) as cnt FROM gam_clients').get() as any)?.cnt || 0;
+    if (existingClientCount === 0) {
+      const now = new Date().toISOString();
+      const initialClients = [
+        { name: 'Blinkcorp Technologies Private Limited', code: '22068249324', tz: 'Asia/Kolkata', cur: 'INR', status: 'ACTIVE' },
+        { name: 'The Federal', code: '22665183713', tz: 'Asia/Kolkata', cur: 'INR', status: 'ACTIVE' },
+        { name: 'News Track', code: '22212039110', tz: 'Asia/Kolkata', cur: 'INR', status: 'ACTIVE' },
+        { name: 'new powergame dot com', code: '22827981500', tz: 'Asia/Kolkata', cur: 'INR', status: 'ACTIVE' },
+        { name: 'Hyderabad Media House L.', code: '310443190', tz: 'Asia/Kolkata', cur: 'INR', status: 'ACTIVE' },
+        { name: 'Illustrated Daily News', code: '22674196146', tz: 'Asia/Kolkata', cur: 'INR', status: 'ACTIVE' },
+        { name: 'pappu farishta', code: '22671723195', tz: 'Asia/Kolkata', cur: 'INR', status: 'ACTIVE' },
+        { name: 'Pratahkal Multimedia', code: '23345489262', tz: 'Asia/Kolkata', cur: 'INR', status: 'ACTIVE' },
+        { name: 'Shreya Broadcasting Pvt L.', code: '83023919', tz: 'Asia/Kolkata', cur: 'INR', status: 'ACTIVE' },
+        { name: 'Vartha Bharati', code: '20030162679', tz: 'Asia/Kolkata', cur: 'INR', status: 'ACTIVE' }
+      ];
+
+      const insertClient = db.prepare(`
+        INSERT INTO gam_clients (
+          id, client_name, network_code, gam_network_id, display_name, time_zone, currency_code,
+          credentials_type, status, last_synced_at, sync_status, sync_message, created_by, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+
+      for (let i = 0; i < initialClients.length; i++) {
+        const c = initialClients[i];
+        insertClient.run(
+          `client_${c.code}_001`,
+          c.name,
+          c.code,
+          c.code,
+          c.name,
+          c.tz,
+          c.cur,
+          'GLOBAL_SERVICE_ACCOUNT',
+          c.status,
+          now,
+          'SUCCESS',
+          'Initial system seed',
+          'SYSTEM_SEED',
+          now,
+          now
+        );
+      }
+    }
+
+    // Ensure decommissioned connections (Gaon Connection, Dhanam) are purged from database
+    db.prepare("DELETE FROM gam_clients WHERE network_code IN ('86902771', '22590922850')").run();
+  } catch (err) {
+    console.error('Error seeding initial GAM clients:', err);
+  }
 
   // Seed default demo accounts
   try {

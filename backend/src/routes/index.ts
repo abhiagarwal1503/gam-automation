@@ -8,7 +8,8 @@ import {
   settingsController,
   authController,
   gamLiveController,
-  cmsController
+  cmsController,
+  clientController
 } from '../controllers';
 import { testConnectionController } from '../controllers/testConnectionController';
 import { reportsController, forecastController } from '../controllers/reportsController';
@@ -67,6 +68,15 @@ router.post('/auth/users/:id/toggle-status', authController.toggleUserStatus);
 router.delete('/auth/users/:id', authController.deleteUser);
 router.post('/auth/change-password', authController.changePassword);
 router.get('/auth/users/audit-logs', authController.listAuditLogs);
+
+// GAM Clients & Network Code Onboarding Routes (Admin Only)
+router.get('/admin/clients', clientController.list);
+router.get('/admin/clients/:id', clientController.getById);
+router.post('/admin/clients', clientController.create);
+router.put('/admin/clients/:id', clientController.update);
+router.post('/admin/clients/:id/pull-info', clientController.pullInfo);
+router.post('/admin/clients/test-network', clientController.testNetwork);
+router.delete('/admin/clients/:id', clientController.delete);
 
 // Reports & Performance Routes
 router.get('/reports', reportsController.getCampaignReport);

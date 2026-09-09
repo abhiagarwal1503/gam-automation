@@ -233,7 +233,75 @@ export interface UserRecord extends User {
   salt: string;
 }
 
-export type UserAuditAction = 'USER_CREATED' | 'USER_UPDATED' | 'PASSWORD_RESET' | 'PASSWORD_CHANGED' | 'USER_STATUS_CHANGED' | 'USER_DELETED';
+export type UserAuditAction =
+  | 'USER_CREATED'
+  | 'USER_UPDATED'
+  | 'PASSWORD_RESET'
+  | 'PASSWORD_CHANGED'
+  | 'USER_STATUS_CHANGED'
+  | 'USER_DELETED'
+  | 'CLIENT_ONBOARDED'
+  | 'CLIENT_UPDATED'
+  | 'CLIENT_SYNCED'
+  | 'CLIENT_DELETED';
+
+export type GamCredentialsType = 'GLOBAL_SERVICE_ACCOUNT' | 'CUSTOM_SERVICE_ACCOUNT' | 'OAUTH';
+export type GamClientStatus = 'ACTIVE' | 'INACTIVE' | 'PENDING';
+export type GamSyncStatus = 'SUCCESS' | 'ERROR' | 'PENDING';
+
+export interface GamAccountInfo {
+  networkId?: string;
+  displayName?: string;
+  networkCode?: string;
+  timeZone?: string;
+  currencyCode?: string;
+  effectiveRootAdUnitId?: string;
+  currentUser?: {
+    id: string;
+    name: string;
+    email: string;
+    roleId?: string;
+  };
+  advertisersCount?: number;
+  advertisersSample?: { id: string; name: string; type?: string }[];
+  pulledAt?: string;
+}
+
+export interface GamClient {
+  id: string;
+  clientName: string;
+  networkCode: string;
+  gamNetworkId?: string;
+  displayName?: string;
+  timeZone?: string;
+  currencyCode?: string;
+  effectiveRootAdUnitId?: string;
+  credentialsType: GamCredentialsType;
+  serviceAccountKey?: string;
+  refreshToken?: string;
+  clientEmail?: string;
+  notes?: string;
+  status: GamClientStatus;
+  lastSyncedAt?: string;
+  syncStatus: GamSyncStatus;
+  syncMessage?: string;
+  accountInfo?: GamAccountInfo;
+  createdBy?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface GamClientInput {
+  clientName: string;
+  networkCode: string;
+  credentialsType?: GamCredentialsType;
+  serviceAccountKey?: string;
+  refreshToken?: string;
+  clientEmail?: string;
+  notes?: string;
+  status?: GamClientStatus;
+  autoPullInfo?: boolean;
+}
 
 export interface UserAuditLog {
   id: string;

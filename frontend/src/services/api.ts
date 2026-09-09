@@ -12,7 +12,9 @@ import {
   CmsPartner,
   CmsSyncResult,
   CmsElement,
-  PushDfpResult
+  PushDfpResult,
+  GamClient,
+  GamClientInput
 } from '../types';
 
 const API_BASE = (import.meta.env.VITE_API_URL ? `${import.meta.env.VITE_API_URL}/api` : '/api').replace(/\/+api$/, '/api');
@@ -391,6 +393,47 @@ export const api = {
   }): Promise<PushDfpResult> {
     const res = await axios.post(`${API_BASE}/cms/push-element-dfp`, params);
     return res.data.data;
+  },
+
+  // GAM Clients & Network Code Management (Admin Only)
+  async getClients(): Promise<GamClient[]> {
+    const res = await axios.get(`${API_BASE}/admin/clients`);
+    return res.data.data;
+  },
+
+  async getClient(id: string): Promise<GamClient> {
+    const res = await axios.get(`${API_BASE}/admin/clients/${id}`);
+    return res.data.data;
+  },
+
+  async createClient(data: GamClientInput): Promise<{ success: boolean; message: string; data: GamClient; pullResult?: any }> {
+    const res = await axios.post(`${API_BASE}/admin/clients`, data);
+    return res.data;
+  },
+
+  async updateClient(id: string, data: Partial<GamClient>): Promise<GamClient> {
+    const res = await axios.put(`${API_BASE}/admin/clients/${id}`, data);
+    return res.data.data;
+  },
+
+  async pullClientInfo(id: string): Promise<{ success: boolean; message: string; data: GamClient; pullResult?: any }> {
+    const res = await axios.post(`${API_BASE}/admin/clients/${id}/pull-info`);
+    return res.data;
+  },
+
+  async testClientNetwork(data: {
+    networkCode: string;
+    credentialsType?: string;
+    serviceAccountKey?: string;
+    refreshToken?: string;
+  }): Promise<{ success: boolean; message: string; data: any }> {
+    const res = await axios.post(`${API_BASE}/admin/clients/test-network`, data);
+    return res.data;
+  },
+
+  async deleteClient(id: string): Promise<{ success: boolean; message: string }> {
+    const res = await axios.delete(`${API_BASE}/admin/clients/${id}`);
+    return res.data;
   }
 };
 

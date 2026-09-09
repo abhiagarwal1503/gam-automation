@@ -15,8 +15,10 @@ import {
   settingsRepo,
   userRepo,
   userAuditRepo,
-  cmsPartnerRepo
+  cmsPartnerRepo,
+  clientRepo
 } from '../repositories';
+export { clientController } from './clientController';
 import { CampaignWorkflowService } from '../services/campaignWorkflowService';
 import { CmsSyncService } from '../services/cmsSyncService';
 import { generateGPTTags } from '../utils/gptGenerator';
@@ -31,8 +33,6 @@ import { config } from '../config';
 // All managed GAM networks
 export const GAM_NETWORKS = [
   { name: 'Blinkcorp Technologies Private Limited', code: '22068249324' },
-  { name: 'Dhanam Publications Pvt.', code: '86902771' },
-  { name: 'Gaon Connection', code: '22590922850' },
   { name: 'Hyderabad Media House L.', code: '310443190' },
   { name: 'Illustrated Daily News', code: '22674196146' },
   { name: 'new powergame dot com', code: '22827981500' },
@@ -1279,17 +1279,37 @@ export const authController = {
 // Live GAM Data Controller
 // -------------------------------------------------------------
 export const gamLiveController = {
-  /** Return the list of GAM networks (scoped to partner if non-admin) */
+  /** Return the list of GAM networks (scoped to partner if non-admin, dynamically merging onboarded clients) */
   async getNetworks(req: Request, res: Response) {
     const authUser = getAuthUser(req);
+
+    // Merge static baseline networks with dynamically onboarded clients
+    const networkMap = new Map<string, { name: string; code: string }>();
+    for (const net of GAM_NETWORKS) {
+      networkMap.set(net.code, { name: net.name, code: net.code });
+    }
+
+    try {
+      const dbClients = clientRepo.list();
+      for (const client of dbClients) {
+        networkMap.set(client.networkCode, {
+          name: client.displayName || client.clientName,
+          code: client.networkCode
+        });
+      }
+    } catch {}
+
+    const allNetworks = Array.from(networkMap.values());
+
     // If non-admin partner account, only show their assigned partner network
     if (authUser && authUser.role !== 'admin' && authUser.networkCode && authUser.networkCode !== 'ALL') {
-      const match = GAM_NETWORKS.find(n => n.code === authUser.networkCode);
+      const match = allNetworks.find(n => n.code === authUser.networkCode);
       const data = match ? [match] : [{ name: authUser.partnerName || 'Assigned Network', code: authUser.networkCode }];
       return res.json({ success: true, data });
     }
+
     // Admin or public: return all managed GAM networks
-    return res.json({ success: true, data: GAM_NETWORKS });
+    return res.json({ success: true, data: allNetworks });
   },
 
   /** Fetch real advertisers (ADVERTISER type companies) from a GAM network */

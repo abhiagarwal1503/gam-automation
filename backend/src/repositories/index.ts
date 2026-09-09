@@ -14,7 +14,10 @@ import {
   User,
   UserRecord,
   UserAuditLog,
-  CmsPartner
+  CmsPartner,
+  GamClient,
+  GamClientInput,
+  GamAccountInfo
 } from '../types';
 
 export const userRepo = {
@@ -1093,6 +1096,210 @@ export const cmsPartnerRepo = {
   delete(id: string): boolean {
     const info = db.prepare('DELETE FROM cms_partners WHERE id = ?').run(id);
     return info.changes > 0;
+  }
+};
+
+export const clientRepo = {
+  list(): GamClient[] {
+    const rows: any[] = db.prepare('SELECT * FROM gam_clients ORDER BY created_at DESC').all();
+    return rows.map(r => this.mapRow(r));
+  },
+
+  findById(id: string): GamClient | null {
+    const r: any = db.prepare('SELECT * FROM gam_clients WHERE id = ?').get(id);
+    if (!r) return null;
+    return this.mapRow(r);
+  },
+
+  findByNetworkCode(networkCode: string): GamClient | null {
+    const r: any = db.prepare('SELECT * FROM gam_clients WHERE network_code = ?').get(String(networkCode).trim());
+    if (!r) return null;
+    return this.mapRow(r);
+  },
+
+  getRawCredentials(id: string): { serviceAccountKey?: string; refreshToken?: string; credentialsType: string } | null {
+    const r: any = db.prepare('SELECT credentials_type, service_account_key, refresh_token FROM gam_clients WHERE id = ?').get(id);
+    if (!r) return null;
+    return {
+      credentialsType: r.credentials_type,
+      serviceAccountKey: r.service_account_key || undefined,
+      refreshToken: r.refresh_token || undefined
+    };
+  },
+
+  create(data: GamClientInput & { id?: string; createdBy?: string }): GamClient {
+    const id = data.id || `client_${data.networkCode}_${Date.now().toString().slice(-4)}`;
+    const now = new Date().toISOString();
+    const clientName = data.clientName.trim();
+    const networkCode = data.networkCode.trim();
+    const credentialsType = data.credentialsType || 'GLOBAL_SERVICE_ACCOUNT';
+    const status = data.status || 'ACTIVE';
+
+    db.prepare(`
+      INSERT INTO gam_clients (
+        id, client_name, network_code, gam_network_id, display_name, time_zone, currency_code,
+        effective_root_ad_unit_id, credentials_type, service_account_key, refresh_token, client_email,
+        notes, status, last_synced_at, sync_status, sync_message, account_info, created_by, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      id,
+      clientName,
+      networkCode,
+      null,
+      clientName,
+      'America/New_York',
+      'USD',
+      null,
+      credentialsType,
+      data.serviceAccountKey || null,
+      data.refreshToken || null,
+      data.clientEmail || null,
+      data.notes || null,
+      status,
+      null,
+      'PENDING',
+      'Client registered. Ready to pull GAM account information.',
+      null,
+      data.createdBy || null,
+      now,
+      now
+    );
+
+    return this.findById(id)!;
+  },
+
+  update(id: string, data: Partial<GamClient> & { serviceAccountKey?: string; refreshToken?: string }): GamClient | null {
+    const existing = this.findById(id);
+    if (!existing) return null;
+
+    const now = new Date().toISOString();
+    const clientName = data.clientName !== undefined ? data.clientName.trim() : existing.clientName;
+    const networkCode = data.networkCode !== undefined ? data.networkCode.trim() : existing.networkCode;
+    const displayName = data.displayName !== undefined ? data.displayName : existing.displayName;
+    const gamNetworkId = data.gamNetworkId !== undefined ? data.gamNetworkId : existing.gamNetworkId;
+    const timeZone = data.timeZone !== undefined ? data.timeZone : existing.timeZone;
+    const currencyCode = data.currencyCode !== undefined ? data.currencyCode : existing.currencyCode;
+    const effectiveRootAdUnitId = data.effectiveRootAdUnitId !== undefined ? data.effectiveRootAdUnitId : existing.effectiveRootAdUnitId;
+    const credentialsType = data.credentialsType !== undefined ? data.credentialsType : existing.credentialsType;
+    const clientEmail = data.clientEmail !== undefined ? data.clientEmail : existing.clientEmail;
+    const notes = data.notes !== undefined ? data.notes : existing.notes;
+    const status = data.status !== undefined ? data.status : existing.status;
+
+    // Handle key/token updates: ignore masked '********'
+    const raw = this.getRawCredentials(id);
+    let finalKey = raw?.serviceAccountKey;
+    if (data.serviceAccountKey !== undefined) {
+      if (data.serviceAccountKey === 'REMOVE' || data.serviceAccountKey === '') {
+        finalKey = undefined;
+      } else if (data.serviceAccountKey !== '********') {
+        finalKey = data.serviceAccountKey;
+      }
+    }
+
+    let finalToken = raw?.refreshToken;
+    if (data.refreshToken !== undefined) {
+      if (data.refreshToken === 'REMOVE' || data.refreshToken === '') {
+        finalToken = undefined;
+      } else if (data.refreshToken !== '********') {
+        finalToken = data.refreshToken;
+      }
+    }
+
+    db.prepare(`
+      UPDATE gam_clients SET
+        client_name = ?, network_code = ?, display_name = ?, gam_network_id = ?, time_zone = ?,
+        currency_code = ?, effective_root_ad_unit_id = ?, credentials_type = ?,
+        service_account_key = ?, refresh_token = ?, client_email = ?, notes = ?, status = ?, updated_at = ?
+      WHERE id = ?
+    `).run(
+      clientName, networkCode, displayName || null, gamNetworkId || null, timeZone || null,
+      currencyCode || null, effectiveRootAdUnitId || null, credentialsType,
+      finalKey || null, finalToken || null, clientEmail || null, notes || null, status, now, id
+    );
+
+    return this.findById(id);
+  },
+
+  updateSyncResult(id: string, syncData: {
+    gamNetworkId?: string;
+    displayName?: string;
+    timeZone?: string;
+    currencyCode?: string;
+    effectiveRootAdUnitId?: string;
+    syncStatus: 'SUCCESS' | 'ERROR';
+    syncMessage?: string;
+    accountInfo?: GamAccountInfo;
+  }): GamClient | null {
+    const existing = this.findById(id);
+    if (!existing) return null;
+
+    const now = new Date().toISOString();
+    db.prepare(`
+      UPDATE gam_clients SET
+        gam_network_id = COALESCE(?, gam_network_id),
+        display_name = COALESCE(?, display_name),
+        time_zone = COALESCE(?, time_zone),
+        currency_code = COALESCE(?, currency_code),
+        effective_root_ad_unit_id = COALESCE(?, effective_root_ad_unit_id),
+        last_synced_at = ?,
+        sync_status = ?,
+        sync_message = ?,
+        account_info = ?,
+        updated_at = ?
+      WHERE id = ?
+    `).run(
+      syncData.gamNetworkId || null,
+      syncData.displayName || null,
+      syncData.timeZone || null,
+      syncData.currencyCode || null,
+      syncData.effectiveRootAdUnitId || null,
+      now,
+      syncData.syncStatus,
+      syncData.syncMessage || null,
+      syncData.accountInfo ? JSON.stringify(syncData.accountInfo) : null,
+      now,
+      id
+    );
+
+    return this.findById(id);
+  },
+
+  delete(id: string): boolean {
+    const info = db.prepare('DELETE FROM gam_clients WHERE id = ?').run(id);
+    return info.changes > 0;
+  },
+
+  mapRow(r: any): GamClient {
+    let accountInfo: GamAccountInfo | undefined = undefined;
+    if (r.account_info) {
+      try {
+        accountInfo = JSON.parse(r.account_info);
+      } catch {}
+    }
+
+    return {
+      id: r.id,
+      clientName: r.client_name,
+      networkCode: r.network_code,
+      gamNetworkId: r.gam_network_id || undefined,
+      displayName: r.display_name || undefined,
+      timeZone: r.time_zone || 'America/New_York',
+      currencyCode: r.currency_code || 'USD',
+      effectiveRootAdUnitId: r.effective_root_ad_unit_id || undefined,
+      credentialsType: r.credentials_type || 'GLOBAL_SERVICE_ACCOUNT',
+      serviceAccountKey: r.service_account_key ? '********' : undefined,
+      refreshToken: r.refresh_token ? '********' : undefined,
+      clientEmail: r.client_email || undefined,
+      notes: r.notes || undefined,
+      status: r.status || 'ACTIVE',
+      lastSyncedAt: r.last_synced_at || undefined,
+      syncStatus: r.sync_status || 'PENDING',
+      syncMessage: r.sync_message || undefined,
+      accountInfo,
+      createdBy: r.created_by || undefined,
+      createdAt: r.created_at,
+      updatedAt: r.updated_at
+    };
   }
 };
 

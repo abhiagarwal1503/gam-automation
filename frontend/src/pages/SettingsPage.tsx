@@ -5,21 +5,19 @@ import {
   Globe, ExternalLink, Eye, EyeOff, Edit2, Plus, Server, Activity, X, Check,
   Users, UserPlus, Building2, Layers, Search, Filter, Lock, Unlock, Copy,
   History, UserCheck, UserX, Clock, KeyRound, ShieldAlert, Sparkles, Briefcase,
-  Send, ShieldCheck, HelpCircle
+  Send, ShieldCheck, HelpCircle, Network, DownloadCloud
 } from 'lucide-react';
 import { api } from '../services/api';
 import { useToast } from '../context/ToastContext';
 import { useAuth } from '../context/AuthContext';
-import { SystemSettings, CmsPartner, CmsSyncResult, User, UserAuditLog } from '../types';
+import { SystemSettings, CmsPartner, CmsSyncResult, User, UserAuditLog, GamClient, GamClientInput, GamAccountInfo } from '../types';
 
 const MANAGED_NETWORKS = [
   { name: 'Blinkcorp Technologies Private Limited', code: '22068249324' },
   { name: 'The Federal', code: '22665183713' },
   { name: 'News Track', code: '22212039110' },
-  { name: 'Gaon Connection', code: '22590922850' },
   { name: 'Hyderabad Media House L.', code: '310443190' },
   { name: 'new powergame dot com', code: '22827981500' },
-  { name: 'Dhanam Publications Pvt.', code: '86902771' },
   { name: 'Illustrated Daily News', code: '22674196146' },
   { name: 'pappu farishta', code: '22671723195' },
   { name: 'Pratahkal Multimedia', code: '23345489262' },
@@ -114,6 +112,70 @@ export const SettingsPage: React.FC = () => {
       console.error('Failed to load CMS partners:', err);
     } finally {
       setLoadingPartners(false);
+    }
+  };
+
+  // GAM Client Onboarding & Network Code Management State (Admin only)
+  const [clientsList, setClientsList] = useState<GamClient[]>([]);
+  const [loadingClients, setLoadingClients] = useState<boolean>(false);
+  const [clientModalOpen, setClientModalOpen] = useState<boolean>(false);
+  const [registeringClient, setRegisteringClient] = useState<boolean>(false);
+  const [editClientModalOpen, setEditClientModalOpen] = useState<boolean>(false);
+  const [editingClient, setEditingClient] = useState<GamClient | null>(null);
+  const [savingEditClient, setSavingEditClient] = useState<boolean>(false);
+  const [inspectClientModalOpen, setInspectClientModalOpen] = useState<boolean>(false);
+  const [inspectedClient, setInspectedClient] = useState<GamClient | null>(null);
+  const [deleteConfirmClient, setDeleteConfirmClient] = useState<GamClient | null>(null);
+  const [deletingClient, setDeletingClient] = useState<boolean>(false);
+  const [syncingClientId, setSyncingClientId] = useState<string | null>(null);
+  const [testingNewClient, setTestingNewClient] = useState<boolean>(false);
+  const [testClientResult, setTestClientResult] = useState<any>(null);
+  const [copiedNetworkCode, setCopiedNetworkCode] = useState<string | null>(null);
+  const [clientSearch, setClientSearch] = useState<string>('');
+  const [clientStatusFilter, setClientStatusFilter] = useState<string>('ALL');
+
+  const [clientForm, setClientForm] = useState<GamClientInput>({
+    clientName: '',
+    networkCode: '',
+    credentialsType: 'GLOBAL_SERVICE_ACCOUNT',
+    serviceAccountKey: '',
+    refreshToken: '',
+    clientEmail: '',
+    notes: '',
+    status: 'ACTIVE',
+    autoPullInfo: true
+  });
+
+  const [editClientForm, setEditClientForm] = useState<{
+    clientName: string;
+    networkCode: string;
+    credentialsType: 'GLOBAL_SERVICE_ACCOUNT' | 'CUSTOM_SERVICE_ACCOUNT' | 'OAUTH';
+    serviceAccountKey: string;
+    refreshToken: string;
+    clientEmail: string;
+    notes: string;
+    status: 'ACTIVE' | 'INACTIVE';
+  }>({
+    clientName: '',
+    networkCode: '',
+    credentialsType: 'GLOBAL_SERVICE_ACCOUNT',
+    serviceAccountKey: '',
+    refreshToken: '',
+    clientEmail: '',
+    notes: '',
+    status: 'ACTIVE'
+  });
+
+  const loadClients = async () => {
+    if (!isAdmin) return;
+    try {
+      setLoadingClients(true);
+      const data = await api.getClients();
+      setClientsList(data);
+    } catch (err: any) {
+      console.warn('Failed to load GAM clients:', err);
+    } finally {
+      setLoadingClients(false);
     }
   };
 
@@ -280,6 +342,7 @@ export const SettingsPage: React.FC = () => {
         setCmsPartners(partnersData);
         if (isAdmin) {
           loadUsers();
+          loadClients();
         }
       } catch (err: any) {
         setError(err.message);
@@ -289,6 +352,146 @@ export const SettingsPage: React.FC = () => {
     }
     loadSettings();
   }, [isAdmin]);
+
+  const handleCopyNetworkCode = (code: string) => {
+    navigator.clipboard.writeText(code);
+    setCopiedNetworkCode(code);
+    setTimeout(() => setCopiedNetworkCode(null), 2000);
+  };
+
+  const handleTestNewClient = async () => {
+    if (!clientForm.networkCode.trim()) {
+      toastError('Missing Network Code', 'Please enter a Network Code to test.');
+      return;
+    }
+    setTestingNewClient(true);
+    setTestClientResult(null);
+    try {
+      const res = await api.testClientNetwork({
+        networkCode: clientForm.networkCode.trim(),
+        credentialsType: clientForm.credentialsType,
+        serviceAccountKey: clientForm.serviceAccountKey,
+        refreshToken: clientForm.refreshToken
+      });
+      setTestClientResult(res.data);
+      if (res.success) {
+        toastSuccess('Connection Succeeded', res.message || 'Successfully connected to GAM network!');
+        // Automatically populate clientName if blank
+        if (!clientForm.clientName.trim() && res.data.displayName) {
+          setClientForm(prev => ({ ...prev, clientName: res.data.displayName }));
+        }
+      } else {
+        toastError('GAM Connection Warning', res.message || 'Could not pull full network details.');
+      }
+    } catch (err: any) {
+      toastError('Connection Failed', err.response?.data?.error || err.message);
+    } finally {
+      setTestingNewClient(false);
+    }
+  };
+
+  const handleCreateClient = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!clientForm.clientName.trim() || !clientForm.networkCode.trim()) {
+      toastError('Validation Error', 'Client / Account Name and Network Code are required.');
+      return;
+    }
+    setRegisteringClient(true);
+    try {
+      const res = await api.createClient(clientForm);
+      toastSuccess(
+        'Client Onboarded & Configured',
+        `Google Ad Manager client "${res.data.clientName}" (${res.data.networkCode}) onboarded successfully!`
+      );
+      setClientModalOpen(false);
+      setClientForm({
+        clientName: '',
+        networkCode: '',
+        credentialsType: 'GLOBAL_SERVICE_ACCOUNT',
+        serviceAccountKey: '',
+        refreshToken: '',
+        clientEmail: '',
+        notes: '',
+        status: 'ACTIVE',
+        autoPullInfo: true
+      });
+      setTestClientResult(null);
+      await loadClients();
+    } catch (err: any) {
+      toastError('Onboarding Failed', err.response?.data?.error || err.message);
+    } finally {
+      setRegisteringClient(false);
+    }
+  };
+
+  const handleOpenEditClient = (client: GamClient) => {
+    setEditingClient(client);
+    setEditClientForm({
+      clientName: client.clientName,
+      networkCode: client.networkCode,
+      credentialsType: client.credentialsType,
+      serviceAccountKey: '',
+      refreshToken: '',
+      clientEmail: client.clientEmail || '',
+      notes: client.notes || '',
+      status: client.status === 'INACTIVE' ? 'INACTIVE' : 'ACTIVE'
+    });
+    setEditClientModalOpen(true);
+  };
+
+  const handleSaveEditClient = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingClient) return;
+    setSavingEditClient(true);
+    try {
+      await api.updateClient(editingClient.id, editClientForm);
+      toastSuccess('Client Updated', `Configuration for "${editClientForm.clientName}" saved successfully.`);
+      setEditClientModalOpen(false);
+      setEditingClient(null);
+      await loadClients();
+    } catch (err: any) {
+      toastError('Update Failed', err.response?.data?.error || err.message);
+    } finally {
+      setSavingEditClient(false);
+    }
+  };
+
+  const handlePullClientInfo = async (clientId: string) => {
+    setSyncingClientId(clientId);
+    try {
+      const res = await api.pullClientInfo(clientId);
+      if (res.success) {
+        toastSuccess('GAM Account Synced', res.message);
+      } else {
+        toastError('Sync Warning', res.message);
+      }
+      await loadClients();
+    } catch (err: any) {
+      toastError('Sync Failed', err.response?.data?.error || err.message);
+    } finally {
+      setSyncingClientId(null);
+    }
+  };
+
+  const handleOpenInspectClient = (client: GamClient) => {
+    setInspectedClient(client);
+    setInspectClientModalOpen(true);
+  };
+
+  const handleConfirmDeleteClient = async () => {
+    if (!deleteConfirmClient) return;
+    setDeletingClient(true);
+    try {
+      await api.deleteClient(deleteConfirmClient.id);
+      toastSuccess('Client Configuration Removed', `Client "${deleteConfirmClient.clientName}" was deleted.`);
+      setDeleteConfirmClient(null);
+      await loadClients();
+    } catch (err: any) {
+      toastError('Delete Failed', err.response?.data?.error || err.message);
+    } finally {
+      setDeletingClient(false);
+    }
+  };
 
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -452,6 +655,24 @@ export const SettingsPage: React.FC = () => {
       setUserRoleFilter('admin');
     }
   };
+
+  const filteredClients = clientsList.filter((c) => {
+    if (clientSearch.trim()) {
+      const q = clientSearch.toLowerCase();
+      const inName = c.clientName.toLowerCase().includes(q);
+      const inDisplay = (c.displayName || '').toLowerCase().includes(q);
+      const inCode = c.networkCode.toLowerCase().includes(q);
+      const inEmail = (c.clientEmail || '').toLowerCase().includes(q);
+      if (!inName && !inDisplay && !inCode && !inEmail) return false;
+    }
+    if (clientStatusFilter !== 'ALL' && c.status !== clientStatusFilter) return false;
+    return true;
+  });
+
+  const totalClientsCount = clientsList.length;
+  const activeClientsCount = clientsList.filter(c => c.status === 'ACTIVE').length;
+  const syncedClientsCount = clientsList.filter(c => c.syncStatus === 'SUCCESS').length;
+  const totalDiscoveredAdvertisers = clientsList.reduce((acc, c) => acc + (c.accountInfo?.advertisersCount || 0), 0);
 
   const filteredUsers = usersList.filter((u) => {
     if (userSearch.trim()) {
@@ -720,6 +941,43 @@ export const SettingsPage: React.FC = () => {
           Configure default Line Item delivery rules, network codes, API versioning, and Service Account credentials.
         </p>
       </div>
+
+      {/* Admin Quick Jump Bar */}
+      {isAdmin && (
+        <div className="flex items-center gap-2 overflow-x-auto pb-1 text-xs">
+          <a
+            href="#gam-clients-section"
+            className="px-3.5 py-1.5 rounded-xl bg-blue-50 text-blue-700 hover:bg-blue-100 font-bold border border-blue-200 flex items-center gap-1.5 transition whitespace-nowrap shadow-xs"
+          >
+            <Network className="w-3.5 h-3.5" />
+            <span>GAM Clients & Network Codes</span>
+            <span className="px-1.5 py-0.2 bg-blue-200 text-blue-800 text-[10px] rounded-full font-extrabold">{totalClientsCount}</span>
+          </a>
+          <a
+            href="#user-governance-section"
+            className="px-3.5 py-1.5 rounded-xl bg-purple-50 text-purple-700 hover:bg-purple-100 font-bold border border-purple-200 flex items-center gap-1.5 transition whitespace-nowrap"
+          >
+            <Users className="w-3.5 h-3.5" />
+            <span>User Governance</span>
+            <span className="px-1.5 py-0.2 bg-purple-200 text-purple-800 text-[10px] rounded-full font-extrabold">{totalUsersCount}</span>
+          </a>
+          <a
+            href="#parameters-section"
+            className="px-3.5 py-1.5 rounded-xl bg-slate-100 text-slate-700 hover:bg-slate-200 font-bold border border-slate-200 flex items-center gap-1.5 transition whitespace-nowrap"
+          >
+            <Shield className="w-3.5 h-3.5" />
+            <span>Global Defaults</span>
+          </a>
+          <a
+            href="#cms-sync-section"
+            className="px-3.5 py-1.5 rounded-xl bg-slate-100 text-slate-700 hover:bg-slate-200 font-bold border border-slate-200 flex items-center gap-1.5 transition whitespace-nowrap"
+          >
+            <Server className="w-3.5 h-3.5" />
+            <span>CMS Partners</span>
+            <span className="px-1.5 py-0.2 bg-slate-200 text-slate-800 text-[10px] rounded-full font-extrabold">{cmsPartners.length}</span>
+          </a>
+        </div>
+      )}
 
       {/* Service Account Banner */}
       {settings.hasServiceAccount ? (
@@ -1283,9 +1541,317 @@ export const SettingsPage: React.FC = () => {
           )}
         </div>
 
+        {/* Google Ad Manager Clients & Network Codes (Account Onboarding & Management) - Admin Only */}
+        {isAdmin && (
+          <div id="gam-clients-section" className="bg-white rounded-3xl border border-slate-200/90 shadow-sm overflow-hidden transition-all">
+            {/* Header with Title, Tagline, and Action Buttons */}
+            <div className="p-6 border-b border-slate-100 bg-gradient-to-r from-slate-50/70 via-white to-blue-50/30 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+              <div>
+                <div className="flex items-center gap-2.5">
+                  <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-blue-600 via-indigo-600 to-violet-600 text-white flex items-center justify-center font-bold shadow-md shadow-blue-500/20">
+                    <Network className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h2 className="text-xl font-extrabold text-slate-900 tracking-tight">
+                        Google Ad Manager Clients & Network Codes
+                      </h2>
+                      <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-800 border border-blue-200 uppercase tracking-wider">
+                        Admin Permission Enforced
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Onboard new GAM client accounts, configure Network Codes & credentials, and automatically pull account metadata.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2.5 flex-wrap sm:flex-nowrap">
+                <button
+                  type="button"
+                  onClick={loadClients}
+                  disabled={loadingClients}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-semibold text-xs shadow-xs transition hover:border-slate-300"
+                  title="Refresh Client Directory"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${loadingClients ? 'animate-spin text-blue-600' : 'text-slate-500'}`} />
+                  <span>Refresh</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTestClientResult(null);
+                    setClientModalOpen(true);
+                  }}
+                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold text-xs shadow-md shadow-blue-500/25 transition transform active:scale-95"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Onboard New Client</span>
+                </button>
+              </div>
+            </div>
+
+            {/* KPI Metric Stat Cards */}
+            <div className="p-6 border-b border-slate-100 bg-slate-50/40 grid grid-cols-2 md:grid-cols-4 gap-3.5">
+              <div className="p-4 bg-white rounded-2xl border border-slate-200/80 shadow-xs flex items-center justify-between">
+                <div>
+                  <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Total Clients</div>
+                  <div className="text-2xl font-black text-slate-900 mt-0.5">{totalClientsCount}</div>
+                  <div className="text-[11px] text-slate-500 mt-0.5 font-medium">Configured accounts</div>
+                </div>
+                <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
+                  <Building2 className="w-5 h-5" />
+                </div>
+              </div>
+
+              <div className="p-4 bg-white rounded-2xl border border-slate-200/80 shadow-xs flex items-center justify-between">
+                <div>
+                  <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Active Networks</div>
+                  <div className="text-2xl font-black text-emerald-600 mt-0.5">{activeClientsCount}</div>
+                  <div className="text-[11px] text-slate-500 mt-0.5 font-medium">Ready for booking</div>
+                </div>
+                <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                  <ShieldCheck className="w-5 h-5" />
+                </div>
+              </div>
+
+              <div className="p-4 bg-white rounded-2xl border border-slate-200/80 shadow-xs flex items-center justify-between">
+                <div>
+                  <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Synced with GAM</div>
+                  <div className="text-2xl font-black text-indigo-600 mt-0.5">{syncedClientsCount}</div>
+                  <div className="text-[11px] text-slate-500 mt-0.5 font-medium">SOAP metadata stored</div>
+                </div>
+                <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                  <DownloadCloud className="w-5 h-5" />
+                </div>
+              </div>
+
+              <div className="p-4 bg-white rounded-2xl border border-slate-200/80 shadow-xs flex items-center justify-between">
+                <div>
+                  <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Discovered Advertisers</div>
+                  <div className="text-2xl font-black text-violet-600 mt-0.5">{totalDiscoveredAdvertisers}</div>
+                  <div className="text-[11px] text-slate-500 mt-0.5 font-medium">Across all networks</div>
+                </div>
+                <div className="w-10 h-10 rounded-xl bg-violet-50 text-violet-600 flex items-center justify-center">
+                  <Layers className="w-5 h-5" />
+                </div>
+              </div>
+            </div>
+
+            {/* Search & Filter Bar */}
+            <div className="p-4 sm:p-6 border-b border-slate-100 bg-white flex flex-col sm:flex-row items-center justify-between gap-3">
+              <div className="relative w-full sm:w-80">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  placeholder="Search client name, network code, email..."
+                  value={clientSearch}
+                  onChange={(e) => setClientSearch(e.target.value)}
+                  className="w-full pl-9 pr-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-500/20 focus:bg-white transition"
+                />
+              </div>
+
+              <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+                <span className="text-xs font-semibold text-slate-500">Status:</span>
+                <select
+                  value={clientStatusFilter}
+                  onChange={(e) => setClientStatusFilter(e.target.value)}
+                  className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 focus:ring-2 focus:ring-blue-500/20"
+                >
+                  <option value="ALL">All Statuses ({totalClientsCount})</option>
+                  <option value="ACTIVE">Active Only ({activeClientsCount})</option>
+                  <option value="INACTIVE">Inactive Only</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Clients Directory Table */}
+            <div className="overflow-x-auto">
+              {loadingClients ? (
+                <div className="p-12 text-center text-slate-400">
+                  <RefreshCw className="w-8 h-8 animate-spin mx-auto mb-2 text-blue-600" />
+                  <p className="text-xs font-semibold">Loading configured clients...</p>
+                </div>
+              ) : filteredClients.length === 0 ? (
+                <div className="p-12 text-center text-slate-400">
+                  <Network className="w-12 h-12 mx-auto mb-3 text-slate-300 stroke-1" />
+                  <p className="text-sm font-semibold text-slate-600">No clients match the selected criteria.</p>
+                  <p className="text-xs text-slate-400 mt-1">Click "Onboard New Client" to configure your first Google Ad Manager client.</p>
+                </div>
+              ) : (
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="border-b border-slate-100 bg-slate-50/60 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                      <th className="py-3 px-4">Client & Network Identity</th>
+                      <th className="py-3 px-4">Network Code</th>
+                      <th className="py-3 px-4">Timezone & Currency</th>
+                      <th className="py-3 px-4">Credentials & Root Ad Unit</th>
+                      <th className="py-3 px-4">Sync Status</th>
+                      <th className="py-3 px-4">Discovered Advertisers</th>
+                      <th className="py-3 px-4 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {filteredClients.map((client) => {
+                      const isSyncing = syncingClientId === client.id;
+                      const advCount = client.accountInfo?.advertisersCount ?? 0;
+
+                      return (
+                        <tr key={client.id} className="hover:bg-slate-50/70 transition group">
+                          <td className="py-3.5 px-4">
+                            <div className="font-extrabold text-slate-900 text-sm flex items-center gap-1.5">
+                              {client.clientName}
+                              {client.status === 'ACTIVE' && (
+                                <span className="w-2 h-2 rounded-full bg-emerald-500" title="Active" />
+                              )}
+                            </div>
+                            {client.displayName && client.displayName !== client.clientName && (
+                              <div className="text-[11px] text-slate-500 font-medium truncate max-w-xs mt-0.5">
+                                GAM: {client.displayName}
+                              </div>
+                            )}
+                            {client.clientEmail && (
+                              <div className="text-[10px] text-slate-400 truncate max-w-xs">
+                                {client.clientEmail}
+                              </div>
+                            )}
+                          </td>
+
+                          <td className="py-3.5 px-4">
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-mono text-xs font-bold text-slate-800 bg-slate-100 px-2.5 py-1 rounded-lg border border-slate-200">
+                                {client.networkCode}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => handleCopyNetworkCode(client.networkCode)}
+                                className="p-1 text-slate-400 hover:text-slate-700 rounded transition"
+                                title="Copy Network Code"
+                              >
+                                {copiedNetworkCode === client.networkCode ? (
+                                  <Check className="w-3.5 h-3.5 text-emerald-600" />
+                                ) : (
+                                  <Copy className="w-3.5 h-3.5" />
+                                )}
+                              </button>
+                            </div>
+                            {client.gamNetworkId && client.gamNetworkId !== client.networkCode && (
+                              <div className="text-[10px] text-slate-400 font-mono mt-0.5">
+                                GAM ID: {client.gamNetworkId}
+                              </div>
+                            )}
+                          </td>
+
+                          <td className="py-3.5 px-4">
+                            <div className="text-slate-800 font-semibold">{client.timeZone}</div>
+                            <div className="text-slate-400 font-mono text-[11px]">{client.currencyCode}</div>
+                          </td>
+
+                          <td className="py-3.5 px-4">
+                            <div className="flex items-center gap-1.5">
+                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                client.credentialsType === 'GLOBAL_SERVICE_ACCOUNT'
+                                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                  : 'bg-purple-50 text-purple-700 border border-purple-200'
+                              }`}>
+                                {client.credentialsType === 'GLOBAL_SERVICE_ACCOUNT' ? 'Global Key' : 'Custom Key'}
+                              </span>
+                            </div>
+                            {client.effectiveRootAdUnitId && (
+                              <div className="text-[10px] text-slate-400 font-mono mt-0.5 truncate max-w-[140px]" title={`Root Ad Unit: ${client.effectiveRootAdUnitId}`}>
+                                Root: {client.effectiveRootAdUnitId}
+                              </div>
+                            )}
+                          </td>
+
+                          <td className="py-3.5 px-4">
+                            <div className="flex items-center gap-1.5">
+                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-1 border ${
+                                client.syncStatus === 'SUCCESS'
+                                  ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                                  : client.syncStatus === 'ERROR'
+                                  ? 'bg-rose-50 text-rose-800 border-rose-200'
+                                  : 'bg-amber-50 text-amber-800 border-amber-200'
+                              }`}>
+                                <span className={`w-1.5 h-1.5 rounded-full ${
+                                  client.syncStatus === 'SUCCESS' ? 'bg-emerald-500' : client.syncStatus === 'ERROR' ? 'bg-rose-500' : 'bg-amber-500'
+                                }`} />
+                                {client.syncStatus}
+                              </span>
+                            </div>
+                            {client.lastSyncedAt && (
+                              <div className="text-[10px] text-slate-400 mt-0.5">
+                                {new Date(client.lastSyncedAt).toLocaleDateString()} {new Date(client.lastSyncedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                              </div>
+                            )}
+                          </td>
+
+                          <td className="py-3.5 px-4">
+                            <button
+                              type="button"
+                              onClick={() => handleOpenInspectClient(client)}
+                              className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[11px] border border-slate-200/80 flex items-center gap-1 transition"
+                            >
+                              <Layers className="w-3 h-3 text-blue-600" />
+                              <span>{advCount} Discovered</span>
+                            </button>
+                          </td>
+
+                          <td className="py-3.5 px-4 text-right">
+                            <div className="flex items-center justify-end gap-1">
+                              <button
+                                type="button"
+                                onClick={() => handlePullClientInfo(client.id)}
+                                disabled={isSyncing}
+                                className="p-1.5 text-slate-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition"
+                                title="Pull / Re-sync GAM Account Info"
+                              >
+                                <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin text-blue-600' : ''}`} />
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => handleOpenInspectClient(client)}
+                                className="p-1.5 text-slate-600 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition"
+                                title="Inspect GAM Account Details"
+                              >
+                                <Eye className="w-4 h-4" />
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => handleOpenEditClient(client)}
+                                className="p-1.5 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition"
+                                title="Edit Client Configuration"
+                              >
+                                <Edit2 className="w-4 h-4" />
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => setDeleteConfirmClient(client)}
+                                className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition"
+                                title="Delete Client"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* User Management & Enterprise Access Control (Admin Only) */}
         {isAdmin && (
-          <div className="bg-white rounded-3xl border border-slate-200/90 shadow-sm overflow-hidden transition-all">
+          <div id="user-governance-section" className="bg-white rounded-3xl border border-slate-200/90 shadow-sm overflow-hidden transition-all">
             {/* Header with Title, Tagline, and Action Buttons */}
             <div className="p-6 border-b border-slate-100 bg-gradient-to-r from-slate-50/70 via-white to-purple-50/30 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
               <div>
@@ -2808,6 +3374,537 @@ export const SettingsPage: React.FC = () => {
                 className="px-5 py-2.5 rounded-xl bg-slate-900 text-white text-xs font-bold hover:bg-slate-800 transition"
               >
                 Close Ledger
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Onboard New Client Modal */}
+      {clientModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in overflow-y-auto">
+          <div className="bg-white rounded-3xl border border-slate-200/90 shadow-2xl max-w-2xl w-full p-6 space-y-5 my-8 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-4 border-b border-slate-100">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center text-white shadow-md shadow-blue-500/20 font-bold">
+                  <Network className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-base text-slate-900">Onboard New Google Ad Manager Client</h3>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Configure a Network Code & credentials. Account metadata and advertisers will be pulled automatically.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setClientModalOpen(false)}
+                className="p-1.5 text-slate-400 hover:text-slate-600 rounded-xl hover:bg-slate-100 transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateClient} className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-bold uppercase text-slate-700">
+                    Network Code <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. 22068249324"
+                    value={clientForm.networkCode}
+                    onChange={(e) => setClientForm({ ...clientForm, networkCode: e.target.value })}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs font-mono font-bold focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                  />
+                  <p className="text-[10px] text-slate-400">Found in GAM URL or Admin &gt; Global settings</p>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-bold uppercase text-slate-700">
+                    Client / Account Name <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Blinkcorp Technologies"
+                    value={clientForm.clientName}
+                    onChange={(e) => setClientForm({ ...clientForm, clientName: e.target.value })}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs font-medium focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                  />
+                  <p className="text-[10px] text-slate-400">Internal display name for this client account</p>
+                </div>
+
+                <div className="space-y-1.5 sm:col-span-2">
+                  <label className="block text-xs font-bold uppercase text-slate-700">Client Contact / Alert Email</label>
+                  <input
+                    type="email"
+                    placeholder="adops@client.com (optional)"
+                    value={clientForm.clientEmail || ''}
+                    onChange={(e) => setClientForm({ ...clientForm, clientEmail: e.target.value })}
+                    className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-xs font-medium focus:ring-2 focus:ring-blue-500/20"
+                  />
+                </div>
+
+                <div className="space-y-1.5 sm:col-span-2">
+                  <label className="block text-xs font-bold uppercase text-slate-700">Credentials Mode</label>
+                  <select
+                    value={clientForm.credentialsType}
+                    onChange={(e) => setClientForm({ ...clientForm, credentialsType: e.target.value as any })}
+                    className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-blue-500/20"
+                  >
+                    <option value="GLOBAL_SERVICE_ACCOUNT">Use Active System Service Account (Default)</option>
+                    <option value="CUSTOM_SERVICE_ACCOUNT">Client-Specific Service Account JSON Key</option>
+                    <option value="OAUTH">Client-Specific OAuth Refresh Token</option>
+                  </select>
+                </div>
+
+                {clientForm.credentialsType === 'CUSTOM_SERVICE_ACCOUNT' && (
+                  <div className="space-y-1.5 sm:col-span-2">
+                    <div className="flex items-center justify-between">
+                      <label className="block text-xs font-bold uppercase text-slate-700">Custom Service Account JSON</label>
+                      <label className="cursor-pointer text-xs font-semibold text-blue-600 hover:text-blue-700 flex items-center gap-1">
+                        <Upload className="w-3.5 h-3.5" />
+                        <span>Upload .json</span>
+                        <input
+                          type="file"
+                          accept=".json,application/json"
+                          className="hidden"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (!file) return;
+                            const reader = new FileReader();
+                            reader.onload = (evt) => {
+                              try {
+                                const text = evt.target?.result as string;
+                                JSON.parse(text);
+                                setClientForm({ ...clientForm, serviceAccountKey: text });
+                              } catch {
+                                toastError('Invalid JSON', 'File content is not valid JSON.');
+                              }
+                            };
+                            reader.readAsText(file);
+                          }}
+                        />
+                      </label>
+                    </div>
+                    <textarea
+                      rows={3}
+                      placeholder='Paste JSON containing "client_email" and "private_key"...'
+                      value={clientForm.serviceAccountKey || ''}
+                      onChange={(e) => setClientForm({ ...clientForm, serviceAccountKey: e.target.value })}
+                      className="w-full px-3.5 py-2 rounded-xl border border-slate-300 font-mono text-[11px] focus:ring-2 focus:ring-blue-500/20"
+                    />
+                  </div>
+                )}
+
+                {clientForm.credentialsType === 'OAUTH' && (
+                  <div className="space-y-1.5 sm:col-span-2">
+                    <label className="block text-xs font-bold uppercase text-slate-700">OAuth Refresh Token</label>
+                    <input
+                      type="password"
+                      placeholder="Enter client refresh token..."
+                      value={clientForm.refreshToken || ''}
+                      onChange={(e) => setClientForm({ ...clientForm, refreshToken: e.target.value })}
+                      className="w-full px-3.5 py-2 rounded-xl border border-slate-300 font-mono text-xs focus:ring-2 focus:ring-blue-500/20"
+                    />
+                  </div>
+                )}
+
+                <div className="space-y-1.5 sm:col-span-2">
+                  <label className="block text-xs font-bold uppercase text-slate-700">Notes & Description</label>
+                  <textarea
+                    rows={2}
+                    placeholder="Add operational notes or billing information for this client account..."
+                    value={clientForm.notes || ''}
+                    onChange={(e) => setClientForm({ ...clientForm, notes: e.target.value })}
+                    className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-xs focus:ring-2 focus:ring-blue-500/20"
+                  />
+                </div>
+              </div>
+
+              {/* Live Test & Preview Button */}
+              <div className="p-3.5 bg-slate-50 border border-slate-200/80 rounded-2xl space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                      <Zap className="w-3.5 h-3.5 text-amber-500" />
+                      <span>Verify & Preview Account Metadata</span>
+                    </div>
+                    <p className="text-[11px] text-slate-500 mt-0.5">
+                      Test connection to GAM and preview network name, currency, timezone, and advertisers before saving.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleTestNewClient}
+                    disabled={testingNewClient || !clientForm.networkCode.trim()}
+                    className="px-3.5 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-xl text-xs font-bold shadow-xs transition flex items-center gap-1.5 disabled:opacity-50"
+                  >
+                    {testingNewClient ? <RefreshCw className="w-3.5 h-3.5 animate-spin text-blue-600" /> : <Activity className="w-3.5 h-3.5 text-blue-600" />}
+                    <span>Test & Pull Preview</span>
+                  </button>
+                </div>
+
+                {testClientResult && (
+                  <div className="p-3 bg-white rounded-xl border border-slate-200 text-xs space-y-2 font-sans">
+                    <div className="flex items-center gap-2">
+                      <span className={`w-2 h-2 rounded-full ${testClientResult.displayName ? 'bg-emerald-500' : 'bg-amber-400'}`} />
+                      <span className="font-extrabold text-slate-900">
+                        {testClientResult.displayName || 'Google Ad Manager Network'}
+                      </span>
+                      <span className="font-mono text-[10px] bg-slate-100 text-slate-700 px-2 py-0.5 rounded font-bold">
+                        Code: {testClientResult.networkCode}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px] pt-1 border-t border-slate-100">
+                      <div>
+                        <span className="text-slate-400 block text-[10px]">Timezone</span>
+                        <span className="font-semibold text-slate-700">{testClientResult.timeZone}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 block text-[10px]">Currency</span>
+                        <span className="font-semibold text-slate-700">{testClientResult.currencyCode}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 block text-[10px]">Root Ad Unit</span>
+                        <span className="font-mono text-[10px] text-slate-700">{testClientResult.effectiveRootAdUnitId || 'N/A'}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 block text-[10px]">Advertisers Found</span>
+                        <span className="font-bold text-emerald-600">{testClientResult.advertisersCount} discovered</span>
+                      </div>
+                    </div>
+
+                    {testClientResult.currentUser && (
+                      <div className="text-[10px] text-slate-500 bg-slate-50 p-2 rounded-lg font-mono">
+                        API User: {testClientResult.currentUser.name} ({testClientResult.currentUser.email})
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <div className="pt-2 flex items-center justify-between border-t border-slate-100">
+                <label className="flex items-center gap-2 cursor-pointer text-xs text-slate-600">
+                  <input
+                    type="checkbox"
+                    checked={clientForm.autoPullInfo}
+                    onChange={(e) => setClientForm({ ...clientForm, autoPullInfo: e.target.checked })}
+                    className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-slate-300"
+                  />
+                  <span>Automatically pull GAM info and seed advertisers on save</span>
+                </label>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setClientModalOpen(false)}
+                    className="px-4 py-2.5 rounded-xl border border-slate-300 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={registeringClient}
+                    className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-xs font-bold shadow-md shadow-blue-500/25 transition disabled:opacity-50 flex items-center gap-1.5"
+                  >
+                    {registeringClient ? (
+                      <>
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                        <span>Onboarding Client & Pulling Info...</span>
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle className="w-4 h-4" />
+                        <span>Onboard Client</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Inspect GAM Account Details Modal */}
+      {inspectClientModalOpen && inspectedClient && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in overflow-y-auto">
+          <div className="bg-white rounded-3xl border border-slate-200/90 shadow-2xl max-w-3xl w-full p-6 space-y-5 my-8 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-4 border-b border-slate-100">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-indigo-600 to-violet-600 flex items-center justify-center text-white shadow-md shadow-indigo-500/20 font-bold">
+                  <Eye className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-bold text-base text-slate-900">{inspectedClient.clientName}</h3>
+                    <span className="font-mono text-xs font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200">
+                      {inspectedClient.networkCode}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Google Ad Manager pulled account metadata, root inventory ad unit, and discovered advertisers.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setInspectClientModalOpen(false)}
+                className="p-1.5 text-slate-400 hover:text-slate-600 rounded-xl hover:bg-slate-100 transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Metadata Overview Cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200/80">
+                <div className="text-[10px] uppercase font-bold text-slate-400">GAM Display Name</div>
+                <div className="text-sm font-bold text-slate-900 mt-0.5 truncate">{inspectedClient.displayName || inspectedClient.clientName}</div>
+                <div className="text-[11px] text-slate-500 font-mono mt-0.5">ID: {inspectedClient.gamNetworkId || inspectedClient.networkCode}</div>
+              </div>
+
+              <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200/80">
+                <div className="text-[10px] uppercase font-bold text-slate-400">Regional Settings</div>
+                <div className="text-sm font-bold text-slate-900 mt-0.5">{inspectedClient.timeZone}</div>
+                <div className="text-[11px] text-slate-500 font-mono mt-0.5">Currency: {inspectedClient.currencyCode}</div>
+              </div>
+
+              <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200/80">
+                <div className="text-[10px] uppercase font-bold text-slate-400">Root Ad Unit ID</div>
+                <div className="text-sm font-mono font-bold text-slate-900 mt-0.5 truncate">
+                  {inspectedClient.effectiveRootAdUnitId || 'Direct Root'}
+                </div>
+                <div className="text-[11px] text-slate-500 mt-0.5">
+                  Status: <span className="text-emerald-600 font-bold">{inspectedClient.status}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* API User Card */}
+            {inspectedClient.accountInfo?.currentUser && (
+              <div className="p-4 bg-indigo-50/50 rounded-2xl border border-indigo-100 flex items-center justify-between gap-3 text-xs">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-bold">
+                    <UserCheck className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="font-bold text-slate-900">
+                      GAM API User: {inspectedClient.accountInfo.currentUser.name}
+                    </div>
+                    <div className="text-[11px] text-slate-600 font-mono">
+                      {inspectedClient.accountInfo.currentUser.email} • ID: {inspectedClient.accountInfo.currentUser.id}
+                    </div>
+                  </div>
+                </div>
+                <span className="px-2 py-0.5 bg-indigo-100 text-indigo-800 rounded font-bold text-[10px]">
+                  Verified GAM User
+                </span>
+              </div>
+            )}
+
+            {/* Discovered Advertisers List */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <h4 className="text-xs font-bold uppercase text-slate-700 flex items-center gap-1.5">
+                  <Layers className="w-4 h-4 text-blue-600" />
+                  <span>Discovered Advertisers ({inspectedClient.accountInfo?.advertisersCount || 0})</span>
+                </h4>
+                {inspectedClient.lastSyncedAt && (
+                  <span className="text-[11px] text-slate-400">
+                    Last Synced: {new Date(inspectedClient.lastSyncedAt).toLocaleString()}
+                  </span>
+                )}
+              </div>
+
+              {inspectedClient.accountInfo?.advertisersSample && inspectedClient.accountInfo.advertisersSample.length > 0 ? (
+                <div className="max-h-56 overflow-y-auto rounded-2xl border border-slate-200 divide-y divide-slate-100 bg-white">
+                  {inspectedClient.accountInfo.advertisersSample.map((adv) => (
+                    <div key={adv.id} className="p-2.5 px-3 flex items-center justify-between text-xs hover:bg-slate-50 transition">
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-slate-800">{adv.name}</span>
+                        <span className="px-1.5 py-0.2 bg-slate-100 text-slate-600 text-[10px] rounded font-mono font-medium">
+                          {adv.type || 'ADVERTISER'}
+                        </span>
+                      </div>
+                      <span className="font-mono text-slate-400 text-[11px]">GAM ID: {adv.id}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="p-6 text-center text-slate-400 bg-slate-50 rounded-2xl border border-slate-200 text-xs">
+                  No advertisers sample cached yet. Click "Re-Sync Account Info" to pull live advertisers from GAM.
+                </div>
+              )}
+            </div>
+
+            <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
+              <button
+                type="button"
+                onClick={() => {
+                  setInspectClientModalOpen(false);
+                  handlePullClientInfo(inspectedClient.id);
+                }}
+                className="px-4 py-2 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-bold flex items-center gap-1.5 transition"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                <span>Re-Sync Account Info Now</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setInspectClientModalOpen(false)}
+                className="px-5 py-2 rounded-xl bg-slate-900 text-white text-xs font-bold hover:bg-slate-800 transition"
+              >
+                Close Inspector
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Client Modal */}
+      {editClientModalOpen && editingClient && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in overflow-y-auto">
+          <div className="bg-white rounded-3xl border border-slate-200/90 shadow-2xl max-w-lg w-full p-6 space-y-4 my-8">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center font-bold">
+                  <Edit2 className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-base text-slate-900">Edit Client Configuration</h3>
+                  <p className="text-xs text-slate-500 font-mono">Network Code: {editingClient.networkCode}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditClientModalOpen(false)}
+                className="p-1.5 text-slate-400 hover:text-slate-600 rounded-xl hover:bg-slate-100 transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEditClient} className="space-y-3.5">
+              <div className="space-y-1.5">
+                <label className="block text-xs font-bold uppercase text-slate-700">Client / Account Name</label>
+                <input
+                  type="text"
+                  required
+                  value={editClientForm.clientName}
+                  onChange={(e) => setEditClientForm({ ...editClientForm, clientName: e.target.value })}
+                  className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-xs font-medium focus:ring-2 focus:ring-blue-500/20"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-bold uppercase text-slate-700">Account Status</label>
+                  <select
+                    value={editClientForm.status}
+                    onChange={(e) => setEditClientForm({ ...editClientForm, status: e.target.value as any })}
+                    className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-blue-500/20"
+                  >
+                    <option value="ACTIVE">ACTIVE</option>
+                    <option value="INACTIVE">INACTIVE</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-bold uppercase text-slate-700">Credentials Mode</label>
+                  <select
+                    value={editClientForm.credentialsType}
+                    onChange={(e) => setEditClientForm({ ...editClientForm, credentialsType: e.target.value as any })}
+                    className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-blue-500/20"
+                  >
+                    <option value="GLOBAL_SERVICE_ACCOUNT">Global Service Account</option>
+                    <option value="CUSTOM_SERVICE_ACCOUNT">Custom Key</option>
+                    <option value="OAUTH">Custom OAuth</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="block text-xs font-bold uppercase text-slate-700">Client Contact / Alert Email</label>
+                <input
+                  type="email"
+                  value={editClientForm.clientEmail}
+                  onChange={(e) => setEditClientForm({ ...editClientForm, clientEmail: e.target.value })}
+                  className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-xs focus:ring-2 focus:ring-blue-500/20"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="block text-xs font-bold uppercase text-slate-700">Notes & Operational Details</label>
+                <textarea
+                  rows={2}
+                  value={editClientForm.notes}
+                  onChange={(e) => setEditClientForm({ ...editClientForm, notes: e.target.value })}
+                  className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-xs focus:ring-2 focus:ring-blue-500/20"
+                />
+              </div>
+
+              <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setEditClientModalOpen(false)}
+                  className="px-4 py-2 rounded-xl border border-slate-300 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingEditClient}
+                  className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-md shadow-blue-500/25 transition disabled:opacity-50 flex items-center gap-1.5"
+                >
+                  {savingEditClient ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                  <span>Save Changes</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Client Confirmation Modal */}
+      {deleteConfirmClient && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in">
+          <div className="bg-white rounded-3xl border border-slate-200/90 shadow-2xl max-w-md w-full p-6 space-y-4">
+            <div className="flex items-center gap-3 pb-3 border-b border-slate-100">
+              <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-rose-600 to-red-600 flex items-center justify-center text-white shadow-md shadow-rose-500/20 font-bold">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="font-bold text-base text-slate-900">Remove Client Configuration</h3>
+                <p className="text-xs text-slate-500 font-mono">Network Code: {deleteConfirmClient.networkCode}</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-600 leading-relaxed">
+              Are you sure you want to remove <strong>{deleteConfirmClient.clientName}</strong>? Campaigns and ad units configured under this network code will remain preserved in historical audit logs.
+            </p>
+
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setDeleteConfirmClient(null)}
+                className="px-4 py-2.5 rounded-xl border border-slate-300 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={deletingClient}
+                onClick={handleConfirmDeleteClient}
+                className="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold shadow-md shadow-rose-500/20 transition disabled:opacity-50 flex items-center gap-1.5"
+              >
+                {deletingClient ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                <span>Delete Client</span>
               </button>
             </div>
           </div>
