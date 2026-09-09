@@ -14,14 +14,37 @@ import {
   Upload,
   CheckCircle,
   FileImage,
-  X
+  X,
+  Calendar,
+  Clock,
+  ExternalLink,
+  Globe,
+  Link2,
+  Tag,
+  FolderKanban,
+  LayoutGrid,
+  Check,
+  Layers,
+  CheckCircle2,
+  Copy,
+  SlidersHorizontal
 } from 'lucide-react';
 import { api } from '../services/api';
 import { useToast } from '../context/ToastContext';
 import { useAuth } from '../context/AuthContext';
 import { ImagePreview } from '../components/ImagePreview';
+import { DatePicker } from '../components/DatePicker';
 import { resizeImageToAdSize } from '../utils/imageResizer';
 import { AdSize } from '../types';
+
+const POSITION_PRESETS = [
+  { id: 'homepage', label: 'Homepage' },
+  { id: 'article_top', label: 'Article Top' },
+  { id: 'sidebar', label: 'Sidebar' },
+  { id: 'in_content', label: 'In-Content' },
+  { id: 'footer', label: 'Footer' },
+  { id: 'mobile_sticky', label: 'Mobile Sticky' }
+];
 
 interface CreateCampaignPageProps {
   onSuccess: (campaignId: string) => void;
@@ -162,6 +185,16 @@ export const CreateCampaignPage: React.FC<CreateCampaignPageProps> = ({ onSucces
   // Custom network code manual input
   const [customNetworkCode, setCustomNetworkCode] = useState('');
   const [isCustomMode, setIsCustomMode] = useState(false);
+
+  const { success: showSuccessToast } = useToast();
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
+
+  const handleCopy = (text: string, key: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedKey(key);
+    showSuccessToast('Copied to Clipboard', text);
+    setTimeout(() => setCopiedKey(null), 2000);
+  };
 
   // Auto-resize uploaded banner whenever sizes change or new image is uploaded
   const performAutoResize = async (sourceDataUrl: string, sizesToResize: AdSize[]) => {
@@ -772,22 +805,29 @@ export const CreateCampaignPage: React.FC<CreateCampaignPageProps> = ({ onSucces
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
 
-          {/* ---- Advertiser Combo Box ---- */}
+          {/* ---- Advertiser / Company Dropdown ---- */}
           <div className="md:col-span-2 space-y-2" ref={dropdownRef}>
             <div className="flex items-center justify-between">
-              <label className="block text-sm font-semibold text-slate-900">
-                Advertiser / Company <span className="text-rose-500">*</span>
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                <Building2 className="w-4 h-4 text-purple-600" />
+                <span>Advertiser / Company</span>
+                <span className="text-rose-500 font-bold">*</span>
+                {selectedNetwork && gamAdvertisers.length > 0 && (
+                  <span className="text-[11px] font-semibold text-slate-400 font-mono ml-1">
+                    ({gamAdvertisers.length} in GAM)
+                  </span>
+                )}
               </label>
               {!isAdvertiserScoped && selectedNetwork && (
                 <button
                   type="button"
                   onClick={() => loadAdvertisers(selectedNetwork.code)}
                   disabled={advertiserLoading}
-                  className="flex items-center gap-1 text-xs text-slate-500 hover:text-blue-600 transition"
+                  className="flex items-center gap-1 text-xs font-semibold text-slate-500 hover:text-blue-600 transition px-2 py-0.5 rounded-lg hover:bg-slate-100"
                   title="Reload advertisers from GAM"
                 >
-                  <RefreshCw className={`w-3 h-3 ${advertiserLoading ? 'animate-spin' : ''}`} />
-                  Reload from GAM
+                  <RefreshCw className={`w-3.5 h-3.5 ${advertiserLoading ? 'animate-spin text-blue-600' : ''}`} />
+                  <span>Sync GAM</span>
                 </button>
               )}
             </div>
@@ -814,93 +854,196 @@ export const CreateCampaignPage: React.FC<CreateCampaignPageProps> = ({ onSucces
               </div>
             ) : (
               <div className="relative">
-                {/* Input */}
-                <div className="relative">
-                  <Building2 className="w-4 h-4 absolute left-3.5 top-3 text-slate-400" />
-                  <input
-                    type="text"
-                    placeholder={
-                      !selectedNetwork
-                        ? '← Select a network above first'
-                        : advertiserLoading
-                        ? 'Loading advertisers from GAM...'
-                        : 'Search or type advertiser name...'
-                    }
-                    value={advertiserQuery}
-                    disabled={!selectedNetwork || advertiserLoading}
-                    onChange={(e) => {
-                      setAdvertiserQuery(e.target.value);
-                      setSelectedAdvertiserId(null);
-                      setAdvertiserDropdownOpen(true);
-                    }}
-                    onFocus={() => {
+                {/* When an advertiser is selected from GAM */}
+                {selectedAdvertiserId && !advertiserDropdownOpen ? (
+                  <div
+                    onClick={() => {
                       if (selectedNetwork) setAdvertiserDropdownOpen(true);
                     }}
-                    className="w-full pl-10 pr-10 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 text-sm disabled:opacity-60 disabled:bg-slate-50"
-                  />
-                  <div className="absolute right-3.5 top-3">
-                    {advertiserLoading
-                      ? <Loader2 className="w-4 h-4 text-blue-500 animate-spin" />
-                      : <ChevronDown className="w-4 h-4 text-slate-400" />
-                    }
-                  </div>
-                </div>
-
-                {/* Selected badge */}
-                {selectedAdvertiserId && (
-                  <div className="mt-1.5 flex items-center gap-1.5 text-xs text-emerald-700 font-semibold">
-                    <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" />
-                    Existing GAM Advertiser selected (ID: {selectedAdvertiserId})
-                  </div>
-                )}
-                {!selectedAdvertiserId && advertiserQuery && !advertiserLoading && (
-                  <div className="mt-1.5 flex items-center gap-1.5 text-xs text-amber-700 font-semibold">
-                    <UserPlus className="w-3 h-3" />
-                    Will create new advertiser in GAM
-                  </div>
-                )}
-
-                {/* Dropdown */}
-                {advertiserDropdownOpen && !advertiserLoading && selectedNetwork && (
-                  <div className="absolute z-50 mt-1 w-full bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden">
-                    {/* Search icon in dropdown */}
-                    <div className="px-3 pt-2 pb-1 text-[11px] text-slate-400 uppercase tracking-wider font-semibold border-b border-slate-100">
-                      {filteredAdvertisers.length} advertiser{filteredAdvertisers.length !== 1 ? 's' : ''} in {selectedNetwork.name}
+                    className="flex items-center justify-between p-2.5 sm:p-3 rounded-xl border border-emerald-300 bg-gradient-to-r from-emerald-50/80 to-teal-50/40 shadow-xs cursor-pointer hover:border-emerald-400 transition group"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-9 h-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                        <Building2 className="w-5 h-5" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="text-sm font-bold text-slate-900 flex items-center gap-2 truncate">
+                          <span className="truncate">{advertiserQuery}</span>
+                          <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full border border-emerald-200">
+                            <Check className="w-3 h-3" />
+                            Verified in GAM
+                          </span>
+                        </div>
+                        <div className="text-[11px] text-slate-500 font-mono">
+                          GAM ID: <span className="font-semibold text-slate-700">{selectedAdvertiserId}</span>
+                        </div>
+                      </div>
                     </div>
-                    <div className="max-h-56 overflow-y-auto">
-                      {filteredAdvertisers.length === 0 && advertiserQuery && (
-                        <div className="px-4 py-3 text-xs text-slate-500 italic">No match found for "{advertiserQuery}"</div>
-                      )}
-                      {filteredAdvertisers.map(adv => (
+                    <div className="flex items-center gap-2 shrink-0 ml-3">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setAdvertiserDropdownOpen(true);
+                        }}
+                        className="px-2.5 py-1 text-xs font-semibold text-emerald-800 hover:text-emerald-900 bg-white border border-emerald-200 hover:bg-emerald-50 rounded-lg shadow-2xs transition"
+                      >
+                        Change
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedAdvertiserId(null);
+                          setAdvertiserQuery('');
+                          setAdvertiserDropdownOpen(true);
+                        }}
+                        className="p-1 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition"
+                        title="Clear selection"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  /* Standard Searchable Input */
+                  <div className="relative">
+                    <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                    <input
+                      type="text"
+                      placeholder={
+                        !selectedNetwork
+                          ? '← Select a network above first'
+                          : advertiserLoading
+                          ? 'Loading advertisers from GAM...'
+                          : 'Search or type advertiser name...'
+                      }
+                      value={advertiserQuery}
+                      disabled={!selectedNetwork || advertiserLoading}
+                      onChange={(e) => {
+                        setAdvertiserQuery(e.target.value);
+                        setSelectedAdvertiserId(null);
+                        setAdvertiserDropdownOpen(true);
+                      }}
+                      onFocus={() => {
+                        if (selectedNetwork) setAdvertiserDropdownOpen(true);
+                      }}
+                      className="w-full pl-10 pr-24 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 text-sm disabled:opacity-60 disabled:bg-slate-50 font-medium shadow-2xs transition"
+                    />
+                    <div className="absolute right-2.5 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                      {advertiserQuery && !advertiserLoading && (
                         <button
-                          key={adv.id}
                           type="button"
-                          onClick={() => handleSelectAdvertiser(adv)}
-                          className="w-full text-left px-4 py-2.5 hover:bg-blue-50 transition flex items-center justify-between group"
+                          onClick={() => {
+                            setAdvertiserQuery('');
+                            setSelectedAdvertiserId(null);
+                          }}
+                          className="p-1 rounded-md text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition"
+                          title="Clear advertiser query"
                         >
-                          <div>
-                            <div className="text-sm font-semibold text-slate-900 group-hover:text-blue-700">{adv.name}</div>
-                            <div className="text-[11px] font-mono text-slate-400">GAM ID: {adv.id}</div>
-                          </div>
+                          <X className="w-3.5 h-3.5" />
                         </button>
-                      ))}
+                      )}
+                      {advertiserLoading ? (
+                        <Loader2 className="w-4 h-4 text-blue-500 animate-spin mr-1" />
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setAdvertiserDropdownOpen(!advertiserDropdownOpen)}
+                          disabled={!selectedNetwork}
+                          className="p-1 text-slate-400 hover:text-slate-600 transition rounded-md hover:bg-slate-100"
+                          title="Toggle dropdown"
+                        >
+                          <ChevronDown className={`w-4 h-4 transition-transform ${advertiserDropdownOpen ? 'rotate-180' : ''}`} />
+                        </button>
+                      )}
                     </div>
+                  </div>
+                )}
+
+                {/* Subtitle notice when creating new advertiser in GAM */}
+                {!selectedAdvertiserId && advertiserQuery && !advertiserLoading && (
+                  <div className="mt-1.5 flex items-center gap-1.5 text-xs text-amber-800 font-semibold bg-amber-50/70 border border-amber-200 px-3 py-1.5 rounded-lg">
+                    <UserPlus className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                    <span>Will create new company in Google Ad Manager: <strong>"{advertiserQuery}"</strong></span>
+                  </div>
+                )}
+
+                {/* Dropdown Floating Panel */}
+                {advertiserDropdownOpen && !advertiserLoading && selectedNetwork && (
+                  <div className="absolute z-50 mt-1.5 w-full bg-white border border-slate-200 rounded-2xl shadow-xl overflow-hidden animate-fade-in divide-y divide-slate-100">
+                    {/* Header */}
+                    <div className="px-4 py-2.5 text-[11px] text-slate-500 uppercase tracking-wider font-bold bg-slate-50/80 flex items-center justify-between">
+                      <span className="flex items-center gap-1.5">
+                        <Building2 className="w-3.5 h-3.5 text-slate-400" />
+                        {filteredAdvertisers.length} advertiser{filteredAdvertisers.length !== 1 ? 's' : ''} in {selectedNetwork.name}
+                      </span>
+                      <span className="text-[10px] text-slate-400 font-normal font-sans">Click to select</span>
+                    </div>
+
+                    <div className="max-h-60 overflow-y-auto p-1.5 space-y-1">
+                      {filteredAdvertisers.length === 0 && advertiserQuery && (
+                        <div className="px-4 py-5 text-center text-xs text-slate-500">
+                          <Building2 className="w-6 h-6 text-slate-300 mx-auto mb-1.5" />
+                          No existing advertiser found matching <strong>"{advertiserQuery}"</strong>
+                        </div>
+                      )}
+                      {filteredAdvertisers.map(adv => {
+                        const isChosen = selectedAdvertiserId === adv.id;
+                        return (
+                          <button
+                            key={adv.id}
+                            type="button"
+                            onClick={() => handleSelectAdvertiser(adv)}
+                            className={`w-full text-left px-3.5 py-2.5 rounded-xl transition flex items-center justify-between group ${
+                              isChosen ? 'bg-blue-50 text-blue-900 font-bold border border-blue-200' : 'hover:bg-slate-50 text-slate-800'
+                            }`}
+                          >
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold shrink-0 ${
+                                isChosen ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600 group-hover:bg-blue-100 group-hover:text-blue-700'
+                              }`}>
+                                <Building2 className="w-4 h-4" />
+                              </div>
+                              <div className="truncate">
+                                <div className="text-sm font-semibold text-slate-900 group-hover:text-blue-700 truncate">{adv.name}</div>
+                                <div className="text-[11px] font-mono text-slate-400">GAM ID: {adv.id}</div>
+                              </div>
+                            </div>
+                            {isChosen ? (
+                              <span className="text-xs font-bold text-blue-700 flex items-center gap-1 bg-white px-2 py-0.5 rounded-md border border-blue-200 shrink-0 ml-2">
+                                <Check className="w-3.5 h-3.5 text-blue-600" />
+                                Selected
+                              </span>
+                            ) : (
+                              <span className="text-[11px] text-slate-400 group-hover:text-blue-600 shrink-0 ml-2">
+                                Select →
+                              </span>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+
                     {/* Create New option */}
                     {advertiserQuery && !exactMatch && (
-                      <div className="border-t border-slate-100">
+                      <div className="p-1.5 bg-amber-50/50">
                         <button
                           type="button"
                           onClick={handleCreateNew}
-                          className="w-full text-left px-4 py-3 hover:bg-amber-50 transition flex items-center gap-2"
+                          className="w-full text-left px-3.5 py-2.5 rounded-xl hover:bg-amber-100/80 transition flex items-center gap-2.5 border border-amber-200 bg-amber-50"
                         >
-                          <UserPlus className="w-4 h-4 text-amber-600" />
+                          <div className="w-8 h-8 rounded-lg bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-2xs">
+                            <UserPlus className="w-4 h-4" />
+                          </div>
                           <div>
-                            <div className="text-sm font-semibold text-amber-700">Create new: "{advertiserQuery}"</div>
-                            <div className="text-[11px] text-slate-400">Will create a new Advertiser in GAM</div>
+                            <div className="text-xs font-bold text-amber-900">Create new in GAM: "{advertiserQuery}"</div>
+                            <div className="text-[11px] text-amber-700">Will automatically create and map this advertiser in Google Ad Manager</div>
                           </div>
                         </button>
                       </div>
                     )}
+
                     {advertiserError && (
                       <div className="px-4 py-2 text-xs text-rose-600 bg-rose-50 border-t border-rose-100">
                         ⚠ {advertiserError}
@@ -912,30 +1055,176 @@ export const CreateCampaignPage: React.FC<CreateCampaignPageProps> = ({ onSucces
             )}
           </div>
 
-          {/* ---- GAM Campaign / Entity Name (Custom Prefix) ---- */}
-          <div className="md:col-span-2 space-y-2">
-            <div className="flex items-center justify-between">
-              <label className="block text-sm font-semibold text-slate-900">
-                GAM Campaign / Entity Name
-              </label>
-              <span className="text-xs text-slate-400">Optional • Used to name Order, Line Item, Creative & Ad Unit</span>
-            </div>
-            <input
-              type="text"
-              placeholder="e.g. diwali_sale_2026, techstar_promo, monsoon_fest"
-              value={customName}
-              onChange={(e) => setCustomName(e.target.value)}
-              className="w-full px-4 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 text-sm font-mono"
-            />
-            <p className="text-xs text-slate-500">
-              {customName.trim() ? (
-                <>
-                  Names created in GAM: <code>{customName.trim().toLowerCase().replace(/[\s-]+/g, '_')}_YYYY_MM_DD</code> (Order), <code>{customName.trim().toLowerCase().replace(/[\s-]+/g, '_')}_{position}_300x250</code> (Line Item)
-                </>
-              ) : (
-                'If left blank, defaults to using the advertiser name.'
+          {/* ---- GAM Campaign / Entity Name ---- */}
+          <div className="md:col-span-2 bg-gradient-to-b from-slate-50/90 to-slate-50/40 rounded-2xl border border-slate-200/90 p-4 sm:p-5 space-y-3.5 shadow-2xs">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center font-bold shrink-0 shadow-2xs">
+                  <FolderKanban className="w-4 h-4" />
+                </div>
+                <div>
+                  <label className="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
+                    <span>GAM Campaign / Entity Name</span>
+                    <span className="text-[11px] font-normal text-slate-400 lowercase font-sans">(custom taxonomy prefix)</span>
+                  </label>
+                  <p className="text-[11px] text-slate-500">
+                    Defines the standardized naming prefix for Orders, Line Items, and Creatives in Google Ad Manager.
+                  </p>
+                </div>
+              </div>
+              {customName && (
+                <button
+                  type="button"
+                  onClick={() => setCustomName('')}
+                  className="text-xs text-slate-500 hover:text-slate-800 font-semibold self-start sm:self-center px-2.5 py-1 rounded-lg hover:bg-slate-200/60 transition"
+                >
+                  Clear prefix
+                </button>
               )}
-            </p>
+            </div>
+
+            {/* Input Bar */}
+            <div className="relative">
+              <div className="absolute left-3.5 top-1/2 -translate-y-1/2 flex items-center gap-1 text-slate-400 pointer-events-none">
+                <Tag className="w-4 h-4 text-blue-600" />
+                <span className="text-xs font-mono text-slate-300 font-bold">/</span>
+              </div>
+              <input
+                type="text"
+                placeholder="e.g. diwali_sale_2026, techstar_promo, monsoon_fest"
+                value={customName}
+                onChange={(e) => {
+                  const val = e.target.value.replace(/\s+/g, '_');
+                  setCustomName(val);
+                }}
+                className="w-full pl-11 pr-10 py-3 rounded-xl border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 text-sm font-mono shadow-xs transition"
+              />
+              {customName && (
+                <button
+                  type="button"
+                  onClick={() => setCustomName('')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1 rounded-md hover:bg-slate-100 transition"
+                  title="Clear prefix"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* ---- Target / Click URL ---- */}
+          <div className="md:col-span-2 bg-gradient-to-b from-slate-50/90 to-slate-50/40 rounded-2xl border border-slate-200/90 p-4 sm:p-5 space-y-3.5 shadow-2xs">
+            {/* Header */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold shrink-0 shadow-2xs">
+                  <Globe className="w-4 h-4" />
+                </div>
+                <div>
+                  <label className="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
+                    <span>Target / Click URL</span>
+                    <span className="text-rose-500 font-bold">*</span>
+                  </label>
+                  <p className="text-[11px] text-slate-500">
+                    The destination landing page when users click on the banner ad in Google Ad Manager.
+                  </p>
+                </div>
+              </div>
+              {targetUrl && (
+                <button
+                  type="button"
+                  onClick={() => setTargetUrl('')}
+                  className="text-xs text-slate-500 hover:text-slate-800 font-semibold self-start sm:self-center px-2.5 py-1 rounded-lg hover:bg-slate-200/60 transition"
+                >
+                  Clear URL
+                </button>
+              )}
+            </div>
+
+            {/* Direct Full URL Input */}
+            <div className="relative flex items-center">
+              <div className="absolute left-3.5 top-1/2 -translate-y-1/2 flex items-center pointer-events-none text-emerald-600">
+                <Link2 className="w-4 h-4" />
+              </div>
+              <input
+                type="text"
+                required
+                placeholder="https://example.com/landing-page"
+                value={targetUrl}
+                onChange={(e) => setTargetUrl(e.target.value)}
+                className="w-full pl-10 pr-24 py-3 rounded-xl border border-slate-300 bg-white text-slate-900 font-mono text-sm shadow-xs transition hover:border-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600"
+              />
+              <div className="absolute right-2.5 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                {targetUrl && (
+                  <button
+                    type="button"
+                    onClick={() => setTargetUrl('')}
+                    className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition"
+                    title="Clear URL"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+                {targetUrl && (targetUrl.startsWith('http://') || targetUrl.startsWith('https://')) && (
+                  <a
+                    href={targetUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-sans text-xs font-bold transition shadow-xs"
+                    title="Test landing page in new tab"
+                  >
+                    <span>Test</span>
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                )}
+              </div>
+            </div>
+
+            {/* Status & UTM Tag Builder Strip */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs pt-0.5">
+              {/* Destination status */}
+              <div className="flex items-center gap-1.5">
+                {targetUrl ? (
+                  targetUrl.startsWith('http://') || targetUrl.startsWith('https://') ? (
+                    <span className="text-emerald-700 font-semibold flex items-center gap-1.5">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                      <span>
+                        Destination: <strong className="font-mono text-slate-800">{targetUrl.replace(/^https?:\/\//, '').split('/')[0]}</strong>
+                      </span>
+                    </span>
+                  ) : (
+                    <span className="text-amber-700 font-medium">⚠️ Tip: include http:// or https://</span>
+                  )
+                ) : (
+                  <span className="text-slate-400">Example: https://brand.com/offers or https://yoursite.com/promo</span>
+                )}
+              </div>
+
+              {/* One-click UTM Analytics Parameter Appender */}
+              {targetUrl && (
+                <div className="flex items-center gap-1.5">
+                  {!targetUrl.includes('utm_') ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const separator = targetUrl.includes('?') ? '&' : '?';
+                        const campaignSlug = (customName || advertiserQuery || 'gam').toLowerCase().replace(/[^a-z0-9]+/g, '_');
+                        setTargetUrl(`${targetUrl}${separator}utm_source=gam&utm_medium=display&utm_campaign=${campaignSlug}`);
+                      }}
+                      className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2.5 py-1 rounded-lg transition"
+                    >
+                      <Sparkles className="w-3 h-3 text-emerald-600" />
+                      + Append UTM Tags for Analytics
+                    </button>
+                  ) : (
+                    <span className="text-[11px] text-emerald-700 font-semibold bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-md flex items-center gap-1">
+                      <Check className="w-3 h-3 text-emerald-600" />
+                      UTM tracking active
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Banner Upload & Auto-Resizer */}
@@ -1064,22 +1353,6 @@ export const CreateCampaignPage: React.FC<CreateCampaignPageProps> = ({ onSucces
             )}
           </div>
 
-          {/* Target URL */}
-          <div className="md:col-span-2 space-y-2">
-            <label className="block text-sm font-semibold text-slate-900">
-              Target / Click URL <span className="text-rose-500">*</span>
-            </label>
-            <input
-              type="url"
-              required
-              placeholder="https://example.com/landing"
-              value={targetUrl}
-              onChange={(e) => setTargetUrl(e.target.value)}
-              className="w-full px-4 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 text-sm font-mono"
-            />
-            <p className="text-xs text-slate-400">Where users land when they click the ad.</p>
-          </div>
-
           {/* Banner Auto-Resize Preview */}
           <div className="md:col-span-2">
             <ImagePreview
@@ -1091,32 +1364,84 @@ export const CreateCampaignPage: React.FC<CreateCampaignPageProps> = ({ onSucces
           </div>
 
           {/* Start Date */}
-          <div className="space-y-2">
-            <label className="block text-sm font-semibold text-slate-900">
-              Start Date <span className="text-rose-500">*</span>
-            </label>
-            <input
-              type="date"
-              required
-              value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
-              className="w-full px-4 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 text-sm"
-            />
-          </div>
+          <DatePicker
+            label="Start Date"
+            required
+            value={startDate}
+            onChange={(val) => setStartDate(val)}
+            presets={[
+              { label: 'Today', daysOffset: 0 },
+              { label: 'Tomorrow', daysOffset: 1 },
+              {
+                label: 'Next Mon',
+                calculate: () => {
+                  const d = new Date();
+                  const day = d.getDay();
+                  const diff = d.getDate() + (day === 0 ? 1 : (8 - day));
+                  d.setDate(diff);
+                  return d.toISOString().split('T')[0];
+                }
+              }
+            ]}
+          />
 
           {/* End Date */}
-          <div className="space-y-2">
-            <label className="block text-sm font-semibold text-slate-900">
-              End Date <span className="text-rose-500">*</span>
-            </label>
-            <input
-              type="date"
-              required
-              value={endDate}
-              onChange={(e) => setEndDate(e.target.value)}
-              className="w-full px-4 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 text-sm"
-            />
-          </div>
+          <DatePicker
+            label="End Date"
+            required
+            min={startDate}
+            value={endDate}
+            onChange={(val) => setEndDate(val)}
+            presets={[
+              { label: '+7 Days', daysOffset: 7 },
+              { label: '+14 Days', daysOffset: 14 },
+              { label: '+30 Days', daysOffset: 30 },
+              {
+                label: 'End of Month',
+                calculate: () => {
+                  const d = new Date();
+                  const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+                  return lastDay.toISOString().split('T')[0];
+                }
+              }
+            ]}
+          />
+
+          {/* Flight Duration Badge */}
+          {startDate && endDate && (
+            <div className="md:col-span-2 -mt-2">
+              {(() => {
+                const s = new Date(startDate);
+                const e = new Date(endDate);
+                const diffTime = e.getTime() - s.getTime();
+                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                const isValid = diffDays >= 0;
+                return (
+                  <div className={`p-2.5 rounded-xl text-xs flex items-center justify-between border ${
+                    isValid
+                      ? 'bg-blue-50/70 border-blue-200 text-blue-900'
+                      : 'bg-rose-50 border-rose-200 text-rose-800 font-bold'
+                  }`}>
+                    <div className="flex items-center gap-2">
+                      <Clock className="w-3.5 h-3.5 text-blue-600" />
+                      {isValid ? (
+                        <span>
+                          Flight Duration: <strong>{diffDays === 0 ? '1 Day (Same Day)' : `${diffDays} Days`}</strong> ({startDate} → {endDate})
+                        </span>
+                      ) : (
+                        <span>End Date cannot be earlier than Start Date</span>
+                      )}
+                    </div>
+                    {isValid && (
+                      <span className="text-[10px] px-2 py-0.5 rounded-md bg-blue-100 text-blue-700 font-bold uppercase">
+                        Sponsorship Priority
+                      </span>
+                    )}
+                  </div>
+                );
+              })()}
+            </div>
+          )}
 
           {/* Ad Sizes */}
           <div className="md:col-span-2 space-y-3 pt-2">
@@ -1147,17 +1472,84 @@ export const CreateCampaignPage: React.FC<CreateCampaignPageProps> = ({ onSucces
             </div>
           </div>
 
-          {/* Position */}
-          <div className="space-y-2">
-            <label className="block text-sm font-semibold text-slate-900">Position / Slot</label>
-            <input
-              type="text"
-              value={position}
-              onChange={(e) => setPosition(e.target.value)}
-              placeholder="e.g. homepage, sidebar, article_top"
-              className="w-full px-4 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 text-sm font-mono"
-            />
-            <p className="text-xs text-slate-400">Used in naming: <code>{`{network}_{position}_{size}`}</code></p>
+          {/* Position / Slot */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
+                <LayoutGrid className="w-4 h-4 text-indigo-600" />
+                <span>Position / Slot</span>
+                <span className="text-rose-500 font-bold">*</span>
+                <span className="text-[11px] font-normal text-slate-400 font-sans lowercase">(ad placement target)</span>
+              </label>
+              {position && (
+                <button
+                  type="button"
+                  onClick={() => setPosition('homepage')}
+                  className="text-xs text-slate-500 hover:text-slate-800 font-medium px-2 py-0.5 rounded-md hover:bg-slate-100 transition"
+                >
+                  Reset default
+                </button>
+              )}
+            </div>
+
+            {/* Custom Input Field - Prominent & Clearly Visible */}
+            <div className="relative flex items-center">
+              <div className="absolute left-3.5 top-1/2 -translate-y-1/2 flex items-center pointer-events-none text-indigo-600">
+                <Layers className="w-4 h-4" />
+              </div>
+              <input
+                type="text"
+                required
+                value={position}
+                onChange={(e) => setPosition(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '_'))}
+                placeholder="Enter slot name (e.g. homepage, sidebar, article_top)"
+                className="w-full pl-10 pr-10 py-3 rounded-xl border-2 border-slate-300 bg-white text-slate-900 font-mono font-bold text-sm shadow-xs transition hover:border-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600"
+              />
+              {position && (
+                <button
+                  type="button"
+                  onClick={() => setPosition('')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition"
+                  title="Clear position"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+
+            {/* Quick Placement Preset Pills */}
+            <div className="space-y-1.5 pt-0.5">
+              <span className="block text-[11px] font-semibold text-slate-500">
+                Or pick a quick placement preset:
+              </span>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                {POSITION_PRESETS.map(preset => {
+                  const isActive = position.toLowerCase() === preset.id.toLowerCase();
+                  return (
+                    <button
+                      key={preset.id}
+                      type="button"
+                      onClick={() => setPosition(preset.id)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all border ${
+                        isActive
+                          ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs ring-2 ring-indigo-500/20'
+                          : 'bg-white hover:bg-slate-100 border-slate-200 text-slate-700 hover:border-slate-300'
+                      }`}
+                    >
+                      {preset.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Live GAM Ad Unit Code preview */}
+            <div className="p-3 bg-slate-50/80 rounded-xl border border-slate-200 text-[11px] font-mono text-slate-600">
+              <span className="text-slate-400 block text-[10px] font-sans font-bold uppercase mb-0.5">GAM Ad Unit Code Preview</span>
+              <span className="text-indigo-700 font-bold break-all">
+                /{selectedNetwork?.code || '22068249324'}/{(selectedNetwork?.name || 'network').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '')}_{position || 'slot'}_{selectedSizes[0]?.width || 300}x{selectedSizes[0]?.height || 250}
+              </span>
+            </div>
           </div>
 
           {/* Dry Run */}

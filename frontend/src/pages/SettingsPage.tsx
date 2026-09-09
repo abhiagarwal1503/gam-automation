@@ -5,11 +5,12 @@ import {
   Globe, ExternalLink, Eye, EyeOff, Edit2, Plus, Server, Activity, X, Check,
   Users, UserPlus, Building2, Layers, Search, Filter, Lock, Unlock, Copy,
   History, UserCheck, UserX, Clock, KeyRound, ShieldAlert, Sparkles, Briefcase,
-  Send, ShieldCheck, HelpCircle, Network, DownloadCloud
+  Send, ShieldCheck, HelpCircle, Network, DownloadCloud, ChevronDown
 } from 'lucide-react';
 import { api } from '../services/api';
 import { useToast } from '../context/ToastContext';
 import { useAuth } from '../context/AuthContext';
+import { SearchInput } from '../components/SearchInput';
 import { SystemSettings, CmsPartner, CmsSyncResult, User, UserAuditLog, GamClient, GamClientInput, GamAccountInfo } from '../types';
 
 const MANAGED_NETWORKS = [
@@ -1119,25 +1120,28 @@ export const SettingsPage: React.FC = () => {
             </p>
 
             <div className="space-y-1.5">
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">
+                Service Account JSON Key
+              </label>
               <textarea
                 rows={8}
                 value={rawKeyInput}
                 onChange={(e) => { setRawKeyInput(e.target.value); setKeyError(null); }}
                 placeholder='{\n  "type": "service_account",\n  "project_id": "...",\n  "private_key_id": "...",\n  "private_key": "-----BEGIN RSA PRIVATE KEY-----\\n...",\n  "client_email": "name@project.iam.gserviceaccount.com"\n}'
-                className="w-full p-3 font-mono text-xs rounded-xl border border-slate-300 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none"
+                className="w-full p-3 font-mono text-xs rounded-xl border border-slate-200 bg-white text-slate-800 placeholder-slate-400 shadow-2xs transition hover:border-slate-300 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 outline-none"
               />
               {keyError && (
-                <div className="text-xs text-rose-600 font-medium flex items-center gap-1.5">
-                  <AlertCircle className="w-3.5 h-3.5" />
-                  {keyError}
+                <div className="text-xs text-rose-600 font-medium flex items-center gap-1.5 pt-1">
+                  <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                  <span>{keyError}</span>
                 </div>
               )}
             </div>
 
             <div className="flex items-center justify-between pt-2">
-              <label className="cursor-pointer text-xs font-semibold text-blue-600 hover:text-blue-700 flex items-center gap-1">
-                <Upload className="w-3.5 h-3.5" />
-                Or upload file (.json)
+              <label className="cursor-pointer inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 text-xs font-semibold text-slate-700 transition">
+                <Upload className="w-3.5 h-3.5 text-blue-600" />
+                <span>Upload .json Key File</span>
                 <input
                   type="file"
                   accept=".json,application/json"
@@ -1150,7 +1154,7 @@ export const SettingsPage: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => { setShowKeyModal(false); setKeyError(null); }}
-                  className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100"
+                  className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 transition"
                 >
                   Cancel
                 </button>
@@ -1158,10 +1162,10 @@ export const SettingsPage: React.FC = () => {
                   type="button"
                   disabled={uploadingKey || !rawKeyInput.trim()}
                   onClick={handlePasteKey}
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-semibold shadow-sm transition disabled:opacity-50 flex items-center gap-1.5"
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-md shadow-blue-500/20 transition disabled:opacity-50 flex items-center gap-1.5"
                 >
                   {uploadingKey ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
-                  Save Credentials
+                  <span>Save Credentials</span>
                 </button>
               </div>
             </div>
@@ -1217,15 +1221,20 @@ export const SettingsPage: React.FC = () => {
         )}
 
         {/* Google Network Code & Version */}
-        <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm space-y-4">
+        <div id="parameters-section" className="bg-white rounded-3xl border border-slate-200/90 p-6 shadow-sm space-y-5">
           <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-            <div className="flex items-center gap-2">
-              <Shield className="w-5 h-5 text-blue-600" />
-              <h2 className="font-bold text-base text-slate-900">Google Ad Manager Network Parameters</h2>
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold">
+                <Shield className="w-4 h-4" />
+              </div>
+              <div>
+                <h2 className="font-bold text-base text-slate-900">Google Ad Manager Network Parameters</h2>
+                <p className="text-xs text-slate-500">Core SOAP credentials and system default regional settings</p>
+              </div>
             </div>
-            <div className="flex items-center gap-2">
-              <span className={`w-2.5 h-2.5 rounded-full ${settings.isConnected ? 'bg-emerald-500 animate-pulse' : 'bg-amber-400'}`} />
-              <span className="text-xs font-semibold text-slate-600">
+            <div className="flex items-center gap-2 bg-slate-50 px-3 py-1.5 rounded-full border border-slate-200">
+              <span className={`w-2 h-2 rounded-full ${settings.isConnected ? 'bg-emerald-500 animate-pulse' : 'bg-amber-400'}`} />
+              <span className="text-xs font-semibold text-slate-700">
                 {settings.isConnected ? 'Service Account Ready' : 'Offline Mode'}
               </span>
             </div>
@@ -1233,103 +1242,120 @@ export const SettingsPage: React.FC = () => {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <label className="block text-xs font-bold uppercase text-slate-700">Network Code</label>
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">
+                Network Code
+              </label>
               <input
                 type="text"
                 value={settings.networkCode}
                 onChange={(e) => setSettings({ ...settings, networkCode: e.target.value })}
-                className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm font-mono focus:ring-2 focus:ring-blue-500/20"
+                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white text-xs font-mono font-bold text-slate-800 placeholder-slate-400 shadow-2xs transition hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600"
               />
               <p className="text-[11px] text-slate-400">Your Google Ad Manager Network Code (found in your GAM URL or Network Settings)</p>
             </div>
 
             <div className="space-y-1.5">
-              <label className="block text-xs font-bold uppercase text-slate-700">SOAP API Version</label>
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">
+                SOAP API Version
+              </label>
               <input
                 type="text"
                 value={settings.apiVersion}
                 onChange={(e) => setSettings({ ...settings, apiVersion: e.target.value })}
-                className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm font-mono focus:ring-2 focus:ring-blue-500/20"
+                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white text-xs font-mono font-semibold text-slate-800 placeholder-slate-400 shadow-2xs transition hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600"
               />
               <p className="text-[11px] text-slate-400">Current supported SOAP API version (defaults to v202511)</p>
             </div>
 
             <div className="space-y-1.5">
-              <label className="block text-xs font-bold uppercase text-slate-700">Time Zone</label>
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">
+                Time Zone
+              </label>
               <input
                 type="text"
                 value={settings.timeZone}
                 onChange={(e) => setSettings({ ...settings, timeZone: e.target.value })}
-                className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm font-mono focus:ring-2 focus:ring-blue-500/20"
+                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white text-xs font-mono font-semibold text-slate-800 placeholder-slate-400 shadow-2xs transition hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600"
               />
+              <p className="text-[11px] text-slate-400">Network time zone (e.g. Asia/Kolkata, America/New_York)</p>
             </div>
 
             <div className="space-y-1.5">
-              <label className="block text-xs font-bold uppercase text-slate-700">Currency</label>
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">
+                Currency
+              </label>
               <input
                 type="text"
                 value={settings.currencyCode}
                 onChange={(e) => setSettings({ ...settings, currencyCode: e.target.value })}
-                className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm font-mono focus:ring-2 focus:ring-blue-500/20"
+                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white text-xs font-mono font-bold text-slate-800 placeholder-slate-400 shadow-2xs transition hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600"
               />
+              <p className="text-[11px] text-slate-400">ISO 4217 Currency Code (e.g. INR, USD)</p>
             </div>
           </div>
         </div>
 
         {/* Line Item Placement Defaults */}
-        <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm space-y-4">
-          <h2 className="font-bold text-base text-slate-900 pb-3 border-b border-slate-100">
-            Placement Defaults & Naming
-          </h2>
+        <div className="bg-white rounded-3xl border border-slate-200/90 p-6 shadow-sm space-y-5">
+          <div className="pb-3 border-b border-slate-100">
+            <h2 className="font-bold text-base text-slate-900">Placement Defaults & Naming</h2>
+            <p className="text-xs text-slate-500">Preset properties applied when automatically generating line items and ad tags</p>
+          </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <label className="block text-xs font-bold uppercase text-slate-700">Default Line Item Type</label>
-              <select
-                value={settings.defaultLineItemType}
-                onChange={(e) => setSettings({ ...settings, defaultLineItemType: e.target.value })}
-                className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm font-medium focus:ring-2 focus:ring-blue-500/20"
-              >
-                <option value="STANDARD">STANDARD (Guaranteed impressions)</option>
-                <option value="SPONSORSHIP">SPONSORSHIP (100% SOV)</option>
-                <option value="PRICE_PRIORITY">PRICE_PRIORITY (Remnant)</option>
-                <option value="NETWORK">NETWORK</option>
-                <option value="HOUSE">HOUSE</option>
-              </select>
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">Default Line Item Type</label>
+              <div className="relative">
+                <select
+                  value={settings.defaultLineItemType}
+                  onChange={(e) => setSettings({ ...settings, defaultLineItemType: e.target.value })}
+                  className="w-full px-3.5 py-2.5 pr-10 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-800 shadow-2xs appearance-none transition hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 cursor-pointer"
+                >
+                  <option value="STANDARD">STANDARD (Guaranteed impressions)</option>
+                  <option value="SPONSORSHIP">SPONSORSHIP (100% SOV)</option>
+                  <option value="PRICE_PRIORITY">PRICE_PRIORITY (Remnant)</option>
+                  <option value="NETWORK">NETWORK</option>
+                  <option value="HOUSE">HOUSE</option>
+                </select>
+                <ChevronDown className="w-4 h-4 text-slate-400 pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2" />
+              </div>
             </div>
 
             <div className="space-y-1.5">
-              <label className="block text-xs font-bold uppercase text-slate-700">Default Priority (1-16)</label>
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">Default Priority (1-16)</label>
               <input
                 type="number"
                 min={1}
                 max={16}
                 value={settings.defaultPriority}
                 onChange={(e) => setSettings({ ...settings, defaultPriority: parseInt(e.target.value, 10) })}
-                className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm focus:ring-2 focus:ring-blue-500/20"
+                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white text-xs font-mono font-bold text-slate-800 shadow-2xs transition hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600"
               />
             </div>
 
             <div className="space-y-1.5">
-              <label className="block text-xs font-bold uppercase text-slate-700">Default Cost Type</label>
-              <select
-                value={settings.defaultCostType}
-                onChange={(e) => setSettings({ ...settings, defaultCostType: e.target.value })}
-                className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm font-medium focus:ring-2 focus:ring-blue-500/20"
-              >
-                <option value="CPM">CPM (Cost per thousand impressions)</option>
-                <option value="CPC">CPC (Cost per click)</option>
-                <option value="CPD">CPD (Cost per day)</option>
-              </select>
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">Default Cost Type</label>
+              <div className="relative">
+                <select
+                  value={settings.defaultCostType}
+                  onChange={(e) => setSettings({ ...settings, defaultCostType: e.target.value })}
+                  className="w-full px-3.5 py-2.5 pr-10 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-800 shadow-2xs appearance-none transition hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 cursor-pointer"
+                >
+                  <option value="CPM">CPM (Cost per thousand impressions)</option>
+                  <option value="CPC">CPC (Cost per click)</option>
+                  <option value="CPD">CPD (Cost per day)</option>
+                </select>
+                <ChevronDown className="w-4 h-4 text-slate-400 pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2" />
+              </div>
             </div>
 
             <div className="space-y-1.5">
-              <label className="block text-xs font-bold uppercase text-slate-700">Naming Prefix</label>
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">Naming Prefix</label>
               <input
                 type="text"
                 value={settings.namingPrefix}
                 onChange={(e) => setSettings({ ...settings, namingPrefix: e.target.value })}
-                className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm font-mono focus:ring-2 focus:ring-blue-500/20"
+                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white text-xs font-mono font-semibold text-slate-800 shadow-2xs transition hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600"
               />
               <p className="text-[11px] text-slate-400">Used in ad unit generator: <code>{`{prefix}_{position}_{size}`}</code></p>
             </div>
@@ -1337,7 +1363,7 @@ export const SettingsPage: React.FC = () => {
         </div>
 
         {/* CMS & Partner Sync Integration Section */}
-        <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm space-y-5">
+        <div id="cms-sync-section" className="bg-white rounded-3xl border border-slate-200/90 p-6 shadow-sm space-y-5">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100">
             <div className="flex items-center gap-2.5">
               <div className="p-2 bg-blue-50 text-blue-600 rounded-xl">
@@ -1641,29 +1667,29 @@ export const SettingsPage: React.FC = () => {
             </div>
 
             {/* Search & Filter Bar */}
-            <div className="p-4 sm:p-6 border-b border-slate-100 bg-white flex flex-col sm:flex-row items-center justify-between gap-3">
-              <div className="relative w-full sm:w-80">
-                <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                <input
-                  type="text"
-                  placeholder="Search client name, network code, email..."
-                  value={clientSearch}
-                  onChange={(e) => setClientSearch(e.target.value)}
-                  className="w-full pl-9 pr-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-500/20 focus:bg-white transition"
-                />
-              </div>
+            <div className="p-4 sm:p-5 border-b border-slate-100 bg-white flex flex-col sm:flex-row items-center justify-between gap-3">
+              <SearchInput
+                value={clientSearch}
+                onChange={setClientSearch}
+                placeholder="Search client name, network code, email..."
+                resultCount={filteredClients.length}
+                className="w-full sm:w-96"
+              />
 
               <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
-                <span className="text-xs font-semibold text-slate-500">Status:</span>
-                <select
-                  value={clientStatusFilter}
-                  onChange={(e) => setClientStatusFilter(e.target.value)}
-                  className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 focus:ring-2 focus:ring-blue-500/20"
-                >
-                  <option value="ALL">All Statuses ({totalClientsCount})</option>
-                  <option value="ACTIVE">Active Only ({activeClientsCount})</option>
-                  <option value="INACTIVE">Inactive Only</option>
-                </select>
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-500 shrink-0">Status:</span>
+                <div className="relative min-w-[170px]">
+                  <select
+                    value={clientStatusFilter}
+                    onChange={(e) => setClientStatusFilter(e.target.value)}
+                    className="w-full pl-3.5 pr-9 py-2.5 bg-slate-50 hover:bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 shadow-2xs appearance-none transition focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 cursor-pointer"
+                  >
+                    <option value="ALL">All Statuses ({totalClientsCount})</option>
+                    <option value="ACTIVE">Active Only ({activeClientsCount})</option>
+                    <option value="INACTIVE">Inactive Only</option>
+                  </select>
+                  <ChevronDown className="w-4 h-4 text-slate-400 pointer-events-none absolute right-3 top-1/2 -translate-y-1/2" />
+                </div>
               </div>
             </div>
 
@@ -2019,35 +2045,23 @@ export const SettingsPage: React.FC = () => {
               {/* Filter & Search Bar */}
               <div className="flex flex-wrap items-center gap-3 text-xs">
                 {/* Search Box */}
-                <div className="relative flex-1 min-w-[220px]">
-                  <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-2.5" />
-                  <input
-                    type="text"
-                    placeholder="Search users by name or email address..."
-                    value={userSearch}
-                    onChange={(e) => setUserSearch(e.target.value)}
-                    className="w-full pl-10 pr-9 py-2 bg-slate-50 hover:bg-white focus:bg-white border border-slate-200 focus:border-purple-400 rounded-xl text-xs font-medium focus:ring-2 focus:ring-purple-500/20 transition"
-                  />
-                  {userSearch && (
-                    <button
-                      type="button"
-                      onClick={() => setUserSearch('')}
-                      className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600 p-0.5 rounded-full hover:bg-slate-200"
-                    >
-                      <X className="w-3.5 h-3.5" />
-                    </button>
-                  )}
-                </div>
+                <SearchInput
+                  value={userSearch}
+                  onChange={setUserSearch}
+                  placeholder="Search users by name or email address..."
+                  resultCount={filteredUsers.length}
+                  className="flex-1 min-w-[240px]"
+                />
 
                 {/* Role Filter */}
-                <div className="flex items-center gap-1.5">
+                <div className="relative min-w-[150px]">
                   <select
                     value={userRoleFilter}
                     onChange={(e) => {
                       setUserRoleFilter(e.target.value);
                       setQuickTab('ALL');
                     }}
-                    className="px-3 py-2 bg-slate-50 hover:bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 focus:ring-2 focus:ring-purple-500/20"
+                    className="w-full pl-3.5 pr-8 py-2.5 bg-slate-50 hover:bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 shadow-2xs appearance-none transition focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-600 cursor-pointer"
                   >
                     <option value="ALL">All Roles</option>
                     <option value="admin">Admin (Global)</option>
@@ -2057,30 +2071,32 @@ export const SettingsPage: React.FC = () => {
                     <option value="publisher">Publisher</option>
                     <option value="adops">AdOps</option>
                   </select>
+                  <ChevronDown className="w-4 h-4 text-slate-400 pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2" />
                 </div>
 
                 {/* Status Filter */}
-                <div>
+                <div className="relative min-w-[140px]">
                   <select
                     value={userStatusFilter}
                     onChange={(e) => {
                       setUserStatusFilter(e.target.value);
                       setQuickTab('ALL');
                     }}
-                    className="px-3 py-2 bg-slate-50 hover:bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 focus:ring-2 focus:ring-purple-500/20"
+                    className="w-full pl-3.5 pr-8 py-2.5 bg-slate-50 hover:bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 shadow-2xs appearance-none transition focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-600 cursor-pointer"
                   >
                     <option value="ALL">All Statuses</option>
                     <option value="active">Active Only</option>
                     <option value="deactivated">Deactivated Only</option>
                   </select>
+                  <ChevronDown className="w-4 h-4 text-slate-400 pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2" />
                 </div>
 
                 {/* Partner Network Filter */}
-                <div>
+                <div className="relative min-w-[180px] max-w-[240px]">
                   <select
                     value={userPartnerFilter}
                     onChange={(e) => setUserPartnerFilter(e.target.value)}
-                    className="px-3 py-2 bg-slate-50 hover:bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 max-w-[220px] truncate focus:ring-2 focus:ring-purple-500/20"
+                    className="w-full pl-3.5 pr-8 py-2.5 bg-slate-50 hover:bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 truncate shadow-2xs appearance-none transition focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-600 cursor-pointer"
                   >
                     <option value="ALL">All Networks</option>
                     <option value="ALL">Global Unrestricted</option>
@@ -2090,6 +2106,7 @@ export const SettingsPage: React.FC = () => {
                       </option>
                     ))}
                   </select>
+                  <ChevronDown className="w-4 h-4 text-slate-400 pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2" />
                 </div>
 
                 {/* Reset Filters */}
@@ -2390,80 +2407,93 @@ export const SettingsPage: React.FC = () => {
               </button>
             </div>
 
-            <form onSubmit={handleSavePartner} className="space-y-3.5">
-              <div className="space-y-1">
-                <label className="block text-xs font-bold uppercase text-slate-700">Partner Name</label>
+            <form onSubmit={handleSavePartner} className="space-y-4">
+              <div className="space-y-1.5">
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">
+                  Partner Name <span className="text-rose-500">*</span>
+                </label>
                 <input
                   type="text"
                   required
                   placeholder="e.g. The Federal (Hocalwire Staging)"
                   value={partnerForm.name}
                   onChange={(e) => setPartnerForm({ ...partnerForm, name: e.target.value })}
-                  className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm font-medium focus:ring-2 focus:ring-blue-500/20"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white text-xs font-medium text-slate-800 placeholder-slate-400 shadow-2xs transition hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="block text-xs font-bold uppercase text-slate-700">CMS Type</label>
-                  <select
-                    value={partnerForm.cmsType}
-                    onChange={(e) => setPartnerForm({ ...partnerForm, cmsType: e.target.value as any })}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs font-semibold focus:ring-2 focus:ring-blue-500/20 bg-white"
-                  >
-                    <option value="HOCALWIRE">Hocalwire News CMS</option>
-                    <option value="WORDPRESS">WordPress CMS</option>
-                    <option value="GENERIC_WEBHOOK">Generic REST Webhook</option>
-                  </select>
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">CMS Type</label>
+                  <div className="relative">
+                    <select
+                      value={partnerForm.cmsType}
+                      onChange={(e) => setPartnerForm({ ...partnerForm, cmsType: e.target.value as any })}
+                      className="w-full pl-3.5 pr-8 py-2.5 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-800 shadow-2xs appearance-none transition hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 cursor-pointer"
+                    >
+                      <option value="HOCALWIRE">Hocalwire News CMS</option>
+                      <option value="WORDPRESS">WordPress CMS</option>
+                      <option value="GENERIC_WEBHOOK">Generic REST Webhook</option>
+                    </select>
+                    <ChevronDown className="w-4 h-4 text-slate-400 pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2" />
+                  </div>
                 </div>
 
-                <div className="space-y-1">
-                  <label className="block text-xs font-bold uppercase text-slate-700">Status</label>
-                  <label className="flex items-center gap-2 mt-2 cursor-pointer text-xs font-semibold text-slate-700">
-                    <input
-                      type="checkbox"
-                      checked={partnerForm.isActive}
-                      onChange={(e) => setPartnerForm({ ...partnerForm, isActive: e.target.checked })}
-                      className="rounded text-blue-600 focus:ring-blue-500"
-                    />
-                    Active Partner
-                  </label>
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">Status</label>
+                  <div className="pt-2">
+                    <label className="inline-flex items-center gap-2 cursor-pointer text-xs font-semibold text-slate-700">
+                      <input
+                        type="checkbox"
+                        checked={partnerForm.isActive}
+                        onChange={(e) => setPartnerForm({ ...partnerForm, isActive: e.target.checked })}
+                        className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-slate-300"
+                      />
+                      <span>Active Partner</span>
+                    </label>
+                  </div>
                 </div>
               </div>
 
-              <div className="space-y-1">
-                <label className="block text-xs font-bold uppercase text-slate-700">Endpoint Domain / Host</label>
+              <div className="space-y-1.5">
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">
+                  Endpoint Domain / Host <span className="text-rose-500">*</span>
+                </label>
                 <input
                   type="text"
                   required
                   placeholder="stagingfederalsite.hocalwire.in"
                   value={partnerForm.endpoint}
                   onChange={(e) => setPartnerForm({ ...partnerForm, endpoint: e.target.value })}
-                  className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm font-mono focus:ring-2 focus:ring-blue-500/20"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white text-xs font-mono font-semibold text-slate-800 placeholder-slate-400 shadow-2xs transition hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600"
                 />
               </div>
 
-              <div className="space-y-1">
-                <label className="block text-xs font-bold uppercase text-slate-700">API Path</label>
+              <div className="space-y-1.5">
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">
+                  API Path <span className="text-rose-500">*</span>
+                </label>
                 <input
                   type="text"
                   required
                   placeholder="/dev/h-api/news"
                   value={partnerForm.apiPath}
                   onChange={(e) => setPartnerForm({ ...partnerForm, apiPath: e.target.value })}
-                  className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm font-mono focus:ring-2 focus:ring-blue-500/20"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white text-xs font-mono font-semibold text-slate-800 placeholder-slate-400 shadow-2xs transition hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600"
                 />
               </div>
 
-              <div className="space-y-1">
-                <label className="block text-xs font-bold uppercase text-slate-700">Partner Security Token (s-d)</label>
+              <div className="space-y-1.5">
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">
+                  Partner Security Token (s-d) <span className="text-rose-500">*</span>
+                </label>
                 <input
                   type="text"
                   required
                   placeholder="1Lkya2NAfyWkBFcKmjIHiIQi7cDIxflow7XDwIcPY2sVQi5rXQIu0rVL9yXw33eG"
                   value={partnerForm.securityToken}
                   onChange={(e) => setPartnerForm({ ...partnerForm, securityToken: e.target.value })}
-                  className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm font-mono focus:ring-2 focus:ring-blue-500/20"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white text-xs font-mono font-bold text-slate-800 placeholder-slate-400 shadow-2xs transition hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600"
                 />
                 <p className="text-[11px] text-slate-400">Transmitted in HTTP header <code>s-d: ...</code> and query <code>?s-d=...</code></p>
               </div>
@@ -2543,27 +2573,31 @@ export const SettingsPage: React.FC = () => {
 
             <form onSubmit={handleCreateUser} className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">Full Name</label>
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">
+                    Full Name <span className="text-rose-500">*</span>
+                  </label>
                   <input
                     type="text"
                     required
                     placeholder="e.g. Sarah Jenkins"
                     value={userForm.name}
                     onChange={(e) => setUserForm({ ...userForm, name: e.target.value })}
-                    className="w-full px-3 py-2.5 rounded-xl border border-slate-300 text-xs focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 transition"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white text-xs font-medium text-slate-800 placeholder-slate-400 shadow-2xs transition hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-600"
                   />
                 </div>
 
-                <div className="space-y-1">
-                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">Email Address</label>
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">
+                    Email Address <span className="text-rose-500">*</span>
+                  </label>
                   <input
                     type="email"
                     required
                     placeholder="sarah@gam-agency.com"
                     value={userForm.email}
                     onChange={(e) => setUserForm({ ...userForm, email: e.target.value })}
-                    className="w-full px-3 py-2.5 rounded-xl border border-slate-300 text-xs focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 transition"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white text-xs font-medium text-slate-800 placeholder-slate-400 shadow-2xs transition hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-600"
                   />
                 </div>
               </div>
@@ -2571,7 +2605,9 @@ export const SettingsPage: React.FC = () => {
               {/* Password & Security Configuration */}
               <div className="p-3.5 bg-slate-50 border border-slate-200/80 rounded-2xl space-y-3">
                 <div className="flex items-center justify-between">
-                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">Password</label>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">
+                    Password <span className="text-rose-500">*</span>
+                  </label>
                   <button
                     type="button"
                     onClick={() => {
@@ -2593,7 +2629,7 @@ export const SettingsPage: React.FC = () => {
                     placeholder="Enter password (min 6 characters)"
                     value={userForm.password}
                     onChange={(e) => setUserForm({ ...userForm, password: e.target.value })}
-                    className="w-full px-3 py-2.5 pr-10 rounded-xl border border-slate-300 text-xs font-mono bg-white focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 transition"
+                    className="w-full px-3.5 py-2.5 pr-10 rounded-xl border border-slate-200 bg-white text-xs font-mono font-medium text-slate-800 placeholder-slate-400 shadow-2xs transition hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-600"
                   />
                   <button
                     type="button"
@@ -2606,16 +2642,19 @@ export const SettingsPage: React.FC = () => {
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-                  <div className="space-y-1">
-                    <label className="block text-[11px] font-semibold text-slate-600">Initial Account Status</label>
-                    <select
-                      value={userForm.status}
-                      onChange={(e) => setUserForm({ ...userForm, status: e.target.value as 'active' | 'deactivated' })}
-                      className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs bg-white focus:ring-2 focus:ring-purple-500/20 font-medium"
-                    >
-                      <option value="active">Active (Can log in)</option>
-                      <option value="deactivated">Deactivated (Access locked)</option>
-                    </select>
+                  <div className="space-y-1.5">
+                    <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-600">Initial Account Status</label>
+                    <div className="relative">
+                      <select
+                        value={userForm.status}
+                        onChange={(e) => setUserForm({ ...userForm, status: e.target.value as 'active' | 'deactivated' })}
+                        className="w-full pl-3 pr-8 py-2 rounded-xl border border-slate-200 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-600 font-semibold text-slate-800 shadow-2xs appearance-none transition cursor-pointer"
+                      >
+                        <option value="active">Active (Can log in)</option>
+                        <option value="deactivated">Deactivated (Access locked)</option>
+                      </select>
+                      <ChevronDown className="w-3.5 h-3.5 text-slate-400 pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2" />
+                    </div>
                   </div>
 
                   <div className="flex items-center pt-5">
@@ -2634,32 +2673,35 @@ export const SettingsPage: React.FC = () => {
 
               {/* Role & Access Governance */}
               <div className="space-y-3">
-                <div className="space-y-1">
+                <div className="space-y-1.5">
                   <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">Account Role</label>
-                  <select
-                    value={userForm.role}
-                    onChange={(e) => {
-                      const role = e.target.value as User['role'];
-                      if (role === 'admin') {
-                        setUserForm({ ...userForm, role, networkCode: 'ALL', partnerName: 'All Networks' });
-                      } else {
-                        setUserForm({
-                          ...userForm,
-                          role,
-                          networkCode: MANAGED_NETWORKS[0].code,
-                          partnerName: MANAGED_NETWORKS[0].name
-                        });
-                      }
-                    }}
-                    className="w-full px-3 py-2.5 rounded-xl border border-slate-300 text-xs bg-white focus:ring-2 focus:ring-purple-500/20 font-medium"
-                  >
-                    <option value="trafficker">Trafficker (Partner-scoped campaign operator)</option>
-                    <option value="manager">Manager (Partner-scoped manager with approval rights)</option>
-                    <option value="viewer">Viewer (Read-only analytics and inventory)</option>
-                    <option value="publisher">Publisher (Ad unit tags & script generator access)</option>
-                    <option value="adops">AdOps (QA and creative delivery lead)</option>
-                    <option value="admin">Administrator (Full unrestricted platform governance)</option>
-                  </select>
+                  <div className="relative">
+                    <select
+                      value={userForm.role}
+                      onChange={(e) => {
+                        const role = e.target.value as User['role'];
+                        if (role === 'admin') {
+                          setUserForm({ ...userForm, role, networkCode: 'ALL', partnerName: 'All Networks' });
+                        } else {
+                          setUserForm({
+                            ...userForm,
+                            role,
+                            networkCode: MANAGED_NETWORKS[0].code,
+                            partnerName: MANAGED_NETWORKS[0].name
+                          });
+                        }
+                      }}
+                      className="w-full pl-3.5 pr-8 py-2.5 rounded-xl border border-slate-200 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-600 font-semibold text-slate-800 shadow-2xs appearance-none transition cursor-pointer"
+                    >
+                      <option value="trafficker">Trafficker (Partner-scoped campaign operator)</option>
+                      <option value="manager">Manager (Partner-scoped manager with approval rights)</option>
+                      <option value="viewer">Viewer (Read-only analytics and inventory)</option>
+                      <option value="publisher">Publisher (Ad unit tags & script generator access)</option>
+                      <option value="adops">AdOps (QA and creative delivery lead)</option>
+                      <option value="admin">Administrator (Full unrestricted platform governance)</option>
+                    </select>
+                    <ChevronDown className="w-4 h-4 text-slate-400 pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2" />
+                  </div>
                 </div>
 
                 {userForm.role !== 'admin' && (
@@ -2669,64 +2711,70 @@ export const SettingsPage: React.FC = () => {
                       <span>Partner Network & Scope Boundaries</span>
                     </div>
 
-                    <div className="space-y-1">
-                      <label className="block text-[11px] font-semibold text-slate-600">Assign Partner Network</label>
-                      <select
-                        value={userForm.networkCode}
-                        onChange={(e) => {
-                          const selCode = e.target.value;
-                          const match = MANAGED_NETWORKS.find((n) => n.code === selCode);
-                          setUserForm({
-                            ...userForm,
-                            networkCode: selCode,
-                            partnerName: match ? match.name : selCode,
-                            advertiserId: 'ALL',
-                            advertiserName: 'All Advertisers'
-                          });
-                        }}
-                        className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs bg-white focus:ring-2 focus:ring-purple-500/20 font-medium"
-                      >
-                        {MANAGED_NETWORKS.map((net) => (
-                          <option key={net.code} value={net.code}>
-                            {net.name} ({net.code})
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div className="space-y-1">
-                      <div className="flex items-center justify-between">
-                        <label className="block text-[11px] font-semibold text-slate-600">Advertiser Assignment</label>
-                        <span className="text-[10px] text-purple-700 font-bold uppercase">Default: All Advertisers</span>
-                      </div>
-                      <select
-                        value={userForm.advertiserId || 'ALL'}
-                        onChange={(e) => {
-                          const selAdvId = e.target.value;
-                          if (selAdvId === 'ALL') {
+                    <div className="space-y-1.5">
+                      <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-600">Assign Partner Network</label>
+                      <div className="relative">
+                        <select
+                          value={userForm.networkCode}
+                          onChange={(e) => {
+                            const selCode = e.target.value;
+                            const match = MANAGED_NETWORKS.find((n) => n.code === selCode);
                             setUserForm({
                               ...userForm,
+                              networkCode: selCode,
+                              partnerName: match ? match.name : selCode,
                               advertiserId: 'ALL',
                               advertiserName: 'All Advertisers'
                             });
-                          } else {
-                            const match = partnerAdvertiserList.find((a) => a.id === selAdvId);
-                            setUserForm({
-                              ...userForm,
-                              advertiserId: selAdvId,
-                              advertiserName: match ? match.name : selAdvId
-                            });
-                          }
-                        }}
-                        className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs bg-white focus:ring-2 focus:ring-purple-500/20 font-medium"
-                      >
-                        <option value="ALL">🌐 All Advertisers (Full Network Breadth)</option>
-                        {partnerAdvertiserList.map((adv) => (
-                          <option key={adv.id} value={adv.id}>
-                            {adv.name} (ID: {adv.id})
-                          </option>
-                        ))}
-                      </select>
+                          }}
+                          className="w-full pl-3 pr-8 py-2 rounded-xl border border-slate-200 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-600 font-semibold text-slate-800 shadow-2xs appearance-none transition cursor-pointer"
+                        >
+                          {MANAGED_NETWORKS.map((net) => (
+                            <option key={net.code} value={net.code}>
+                              {net.name} ({net.code})
+                            </option>
+                          ))}
+                        </select>
+                        <ChevronDown className="w-3.5 h-3.5 text-slate-400 pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2" />
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-600">Advertiser Assignment</label>
+                        <span className="text-[10px] text-purple-700 font-bold uppercase">Default: All Advertisers</span>
+                      </div>
+                      <div className="relative">
+                        <select
+                          value={userForm.advertiserId || 'ALL'}
+                          onChange={(e) => {
+                            const selAdvId = e.target.value;
+                            if (selAdvId === 'ALL') {
+                              setUserForm({
+                                ...userForm,
+                                advertiserId: 'ALL',
+                                advertiserName: 'All Advertisers'
+                              });
+                            } else {
+                              const match = partnerAdvertiserList.find((a) => a.id === selAdvId);
+                              setUserForm({
+                                ...userForm,
+                                advertiserId: selAdvId,
+                                advertiserName: match ? match.name : selAdvId
+                              });
+                            }
+                          }}
+                          className="w-full pl-3 pr-8 py-2 rounded-xl border border-slate-200 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-600 font-semibold text-slate-800 shadow-2xs appearance-none transition cursor-pointer"
+                        >
+                          <option value="ALL">🌐 All Advertisers (Full Network Breadth)</option>
+                          {partnerAdvertiserList.map((adv) => (
+                            <option key={adv.id} value={adv.id}>
+                              {adv.name} (ID: {adv.id})
+                            </option>
+                          ))}
+                        </select>
+                        <ChevronDown className="w-3.5 h-3.5 text-slate-400 pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2" />
+                      </div>
                     </div>
                   </div>
                 )}
@@ -2795,70 +2843,80 @@ export const SettingsPage: React.FC = () => {
 
             <form onSubmit={handleSaveEditUser} className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">Full Name</label>
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">
+                    Full Name <span className="text-rose-500">*</span>
+                  </label>
                   <input
                     type="text"
                     required
                     value={editForm.name}
                     onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-                    className="w-full px-3 py-2.5 rounded-xl border border-slate-300 text-xs focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 transition"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white text-xs font-medium text-slate-800 placeholder-slate-400 shadow-2xs transition hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-600"
                   />
                 </div>
 
-                <div className="space-y-1">
-                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">Email Address</label>
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">
+                    Email Address <span className="text-rose-500">*</span>
+                  </label>
                   <input
                     type="email"
                     required
                     value={editForm.email}
                     onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
-                    className="w-full px-3 py-2.5 rounded-xl border border-slate-300 text-xs focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 transition"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white text-xs font-medium text-slate-800 placeholder-slate-400 shadow-2xs transition hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-600"
                   />
                 </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="space-y-1">
+                <div className="space-y-1.5">
                   <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">Account Role</label>
-                  <select
-                    value={editForm.role}
-                    disabled={editingUserId === currentUser?.id}
-                    onChange={(e) => {
-                      const role = e.target.value as User['role'];
-                      if (role === 'admin') {
-                        setEditForm({ ...editForm, role, networkCode: 'ALL', partnerName: 'All Networks' });
-                      } else {
-                        setEditForm({
-                          ...editForm,
-                          role,
-                          networkCode: MANAGED_NETWORKS[0].code,
-                          partnerName: MANAGED_NETWORKS[0].name
-                        });
-                      }
-                    }}
-                    className="w-full px-3 py-2.5 rounded-xl border border-slate-300 text-xs bg-white focus:ring-2 focus:ring-purple-500/20 font-medium disabled:bg-slate-100 disabled:cursor-not-allowed"
-                  >
-                    <option value="trafficker">Trafficker</option>
-                    <option value="manager">Manager</option>
-                    <option value="viewer">Viewer</option>
-                    <option value="publisher">Publisher</option>
-                    <option value="adops">AdOps</option>
-                    <option value="admin">Administrator</option>
-                  </select>
+                  <div className="relative">
+                    <select
+                      value={editForm.role}
+                      disabled={editingUserId === currentUser?.id}
+                      onChange={(e) => {
+                        const role = e.target.value as User['role'];
+                        if (role === 'admin') {
+                          setEditForm({ ...editForm, role, networkCode: 'ALL', partnerName: 'All Networks' });
+                        } else {
+                          setEditForm({
+                            ...editForm,
+                            role,
+                            networkCode: MANAGED_NETWORKS[0].code,
+                            partnerName: MANAGED_NETWORKS[0].name
+                          });
+                        }
+                      }}
+                      className="w-full pl-3.5 pr-8 py-2.5 rounded-xl border border-slate-200 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-600 font-semibold text-slate-800 shadow-2xs appearance-none transition disabled:bg-slate-100 disabled:cursor-not-allowed cursor-pointer"
+                    >
+                      <option value="trafficker">Trafficker</option>
+                      <option value="manager">Manager</option>
+                      <option value="viewer">Viewer</option>
+                      <option value="publisher">Publisher</option>
+                      <option value="adops">AdOps</option>
+                      <option value="admin">Administrator</option>
+                    </select>
+                    <ChevronDown className="w-4 h-4 text-slate-400 pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2" />
+                  </div>
                 </div>
 
-                <div className="space-y-1">
+                <div className="space-y-1.5">
                   <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">Account Status</label>
-                  <select
-                    value={editForm.status}
-                    disabled={editingUserId === currentUser?.id}
-                    onChange={(e) => setEditForm({ ...editForm, status: e.target.value as 'active' | 'deactivated' })}
-                    className="w-full px-3 py-2.5 rounded-xl border border-slate-300 text-xs bg-white focus:ring-2 focus:ring-purple-500/20 font-medium disabled:bg-slate-100 disabled:cursor-not-allowed"
-                  >
-                    <option value="active">Active (Access Allowed)</option>
-                    <option value="deactivated">Deactivated (Locked Out)</option>
-                  </select>
+                  <div className="relative">
+                    <select
+                      value={editForm.status}
+                      disabled={editingUserId === currentUser?.id}
+                      onChange={(e) => setEditForm({ ...editForm, status: e.target.value as 'active' | 'deactivated' })}
+                      className="w-full pl-3.5 pr-8 py-2.5 rounded-xl border border-slate-200 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-600 font-semibold text-slate-800 shadow-2xs appearance-none transition disabled:bg-slate-100 disabled:cursor-not-allowed cursor-pointer"
+                    >
+                      <option value="active">Active (Access Allowed)</option>
+                      <option value="deactivated">Deactivated (Locked Out)</option>
+                    </select>
+                    <ChevronDown className="w-4 h-4 text-slate-400 pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2" />
+                  </div>
                 </div>
               </div>
 
@@ -2869,61 +2927,67 @@ export const SettingsPage: React.FC = () => {
                     <span>Partner & Scope Boundaries</span>
                   </div>
 
-                  <div className="space-y-1">
-                    <label className="block text-[11px] font-semibold text-slate-600">Partner Network</label>
-                    <select
-                      value={editForm.networkCode}
-                      onChange={(e) => {
-                        const selCode = e.target.value;
-                        const match = MANAGED_NETWORKS.find((n) => n.code === selCode);
-                        setEditForm({
-                          ...editForm,
-                          networkCode: selCode,
-                          partnerName: match ? match.name : selCode,
-                          advertiserId: 'ALL',
-                          advertiserName: 'All Advertisers'
-                        });
-                      }}
-                      className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs bg-white focus:ring-2 focus:ring-purple-500/20 font-medium"
-                    >
-                      {MANAGED_NETWORKS.map((net) => (
-                        <option key={net.code} value={net.code}>
-                          {net.name} ({net.code})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="block text-[11px] font-semibold text-slate-600">Mapped Advertiser</label>
-                    <select
-                      value={editForm.advertiserId || 'ALL'}
-                      onChange={(e) => {
-                        const selAdvId = e.target.value;
-                        if (selAdvId === 'ALL') {
+                  <div className="space-y-1.5">
+                    <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-600">Partner Network</label>
+                    <div className="relative">
+                      <select
+                        value={editForm.networkCode}
+                        onChange={(e) => {
+                          const selCode = e.target.value;
+                          const match = MANAGED_NETWORKS.find((n) => n.code === selCode);
                           setEditForm({
                             ...editForm,
+                            networkCode: selCode,
+                            partnerName: match ? match.name : selCode,
                             advertiserId: 'ALL',
                             advertiserName: 'All Advertisers'
                           });
-                        } else {
-                          const match = editAdvertisersList.find((a) => a.id === selAdvId);
-                          setEditForm({
-                            ...editForm,
-                            advertiserId: selAdvId,
-                            advertiserName: match ? match.name : selAdvId
-                          });
-                        }
-                      }}
-                      className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs bg-white focus:ring-2 focus:ring-purple-500/20 font-medium"
-                    >
-                      <option value="ALL">🌐 All Advertisers (Full Access)</option>
-                      {editAdvertisersList.map((adv) => (
-                        <option key={adv.id} value={adv.id}>
-                          {adv.name} (ID: {adv.id})
-                        </option>
-                      ))}
-                    </select>
+                        }}
+                        className="w-full pl-3 pr-8 py-2 rounded-xl border border-slate-200 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-600 font-semibold text-slate-800 shadow-2xs appearance-none transition cursor-pointer"
+                      >
+                        {MANAGED_NETWORKS.map((net) => (
+                          <option key={net.code} value={net.code}>
+                            {net.name} ({net.code})
+                          </option>
+                        ))}
+                      </select>
+                      <ChevronDown className="w-3.5 h-3.5 text-slate-400 pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2" />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-600">Mapped Advertiser</label>
+                    <div className="relative">
+                      <select
+                        value={editForm.advertiserId || 'ALL'}
+                        onChange={(e) => {
+                          const selAdvId = e.target.value;
+                          if (selAdvId === 'ALL') {
+                            setEditForm({
+                              ...editForm,
+                              advertiserId: 'ALL',
+                              advertiserName: 'All Advertisers'
+                            });
+                          } else {
+                            const match = editAdvertisersList.find((a) => a.id === selAdvId);
+                            setEditForm({
+                              ...editForm,
+                              advertiserId: selAdvId,
+                              advertiserName: match ? match.name : selAdvId
+                            });
+                          }
+                        }}
+                        className="w-full pl-3 pr-8 py-2 rounded-xl border border-slate-200 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-600 font-semibold text-slate-800 shadow-2xs appearance-none transition cursor-pointer"
+                      >
+                        <option value="ALL">🌐 All Advertisers (Full Access)</option>
+                        {editAdvertisersList.map((adv) => (
+                          <option key={adv.id} value={adv.id}>
+                            {adv.name} (ID: {adv.id})
+                          </option>
+                        ))}
+                      </select>
+                      <ChevronDown className="w-3.5 h-3.5 text-slate-400 pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2" />
+                    </div>
                   </div>
                 </div>
               )}
@@ -3071,7 +3135,7 @@ export const SettingsPage: React.FC = () => {
                       placeholder="Leave blank to auto-generate temporary password"
                       value={customResetPassword}
                       onChange={(e) => setCustomResetPassword(e.target.value)}
-                      className="w-full px-3 py-2.5 pr-10 rounded-xl border border-slate-300 text-xs font-mono focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition"
+                      className="w-full px-3.5 py-2.5 pr-10 rounded-xl border border-slate-200 bg-white text-xs font-mono font-medium text-slate-800 placeholder-slate-400 shadow-2xs transition hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-600"
                     />
                     <button
                       type="button"
@@ -3222,40 +3286,31 @@ export const SettingsPage: React.FC = () => {
 
             {/* Filter & Search Bar */}
             <div className="shrink-0 flex flex-col sm:flex-row items-center gap-2.5 p-3 bg-slate-50 border border-slate-200/80 rounded-2xl">
-              <div className="relative flex-1 w-full">
-                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                <input
-                  type="text"
-                  placeholder="Filter logs by admin email, target user, or detail query..."
-                  value={auditSearch}
-                  onChange={(e) => setAuditSearch(e.target.value)}
-                  className="w-full pl-9 pr-8 py-2 bg-white rounded-xl border border-slate-200 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 transition"
-                />
-                {auditSearch && (
-                  <button
-                    type="button"
-                    onClick={() => setAuditSearch('')}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                )}
-              </div>
+              <SearchInput
+                value={auditSearch}
+                onChange={setAuditSearch}
+                placeholder="Filter logs by admin email, target user, or detail query..."
+                resultCount={filteredAuditLogs.length}
+                className="flex-1 w-full"
+              />
 
               <div className="flex items-center gap-2 w-full sm:w-auto">
-                <select
-                  value={auditActionFilter}
-                  onChange={(e) => setAuditActionFilter(e.target.value)}
-                  className="px-3 py-2 bg-white rounded-xl border border-slate-200 text-xs text-slate-700 font-medium focus:outline-none focus:ring-2 focus:ring-purple-500/20"
-                >
-                  <option value="ALL">All Action Types</option>
-                  <option value="USER_CREATED">Account Created</option>
-                  <option value="USER_UPDATED">Account Updated</option>
-                  <option value="PASSWORD_RESET">Password Reset</option>
-                  <option value="PASSWORD_CHANGED">Password Changed</option>
-                  <option value="USER_STATUS_CHANGED">Status Toggled</option>
-                  <option value="USER_DELETED">Account Soft-Deleted</option>
-                </select>
+                <div className="relative min-w-[170px]">
+                  <select
+                    value={auditActionFilter}
+                    onChange={(e) => setAuditActionFilter(e.target.value)}
+                    className="w-full pl-3.5 pr-8 py-2.5 bg-white rounded-xl border border-slate-200 text-xs text-slate-700 font-semibold shadow-2xs appearance-none transition focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-600 cursor-pointer"
+                  >
+                    <option value="ALL">All Action Types</option>
+                    <option value="USER_CREATED">Account Created</option>
+                    <option value="USER_UPDATED">Account Updated</option>
+                    <option value="PASSWORD_RESET">Password Reset</option>
+                    <option value="PASSWORD_CHANGED">Password Changed</option>
+                    <option value="USER_STATUS_CHANGED">Status Toggled</option>
+                    <option value="USER_DELETED">Account Soft-Deleted</option>
+                  </select>
+                  <ChevronDown className="w-3.5 h-3.5 text-slate-400 pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2" />
+                </div>
 
                 <button
                   type="button"
@@ -3407,7 +3462,7 @@ export const SettingsPage: React.FC = () => {
             <form onSubmit={handleCreateClient} className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
-                  <label className="block text-xs font-bold uppercase text-slate-700">
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">
                     Network Code <span className="text-rose-500">*</span>
                   </label>
                   <input
@@ -3416,13 +3471,13 @@ export const SettingsPage: React.FC = () => {
                     placeholder="e.g. 22068249324"
                     value={clientForm.networkCode}
                     onChange={(e) => setClientForm({ ...clientForm, networkCode: e.target.value })}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs font-mono font-bold focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white text-xs font-mono font-bold text-slate-800 placeholder-slate-400 shadow-2xs transition hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600"
                   />
                   <p className="text-[10px] text-slate-400">Found in GAM URL or Admin &gt; Global settings</p>
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="block text-xs font-bold uppercase text-slate-700">
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">
                     Client / Account Name <span className="text-rose-500">*</span>
                   </label>
                   <input
@@ -3431,40 +3486,43 @@ export const SettingsPage: React.FC = () => {
                     placeholder="e.g. Blinkcorp Technologies"
                     value={clientForm.clientName}
                     onChange={(e) => setClientForm({ ...clientForm, clientName: e.target.value })}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs font-medium focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white text-xs font-medium text-slate-800 placeholder-slate-400 shadow-2xs transition hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600"
                   />
                   <p className="text-[10px] text-slate-400">Internal display name for this client account</p>
                 </div>
 
                 <div className="space-y-1.5 sm:col-span-2">
-                  <label className="block text-xs font-bold uppercase text-slate-700">Client Contact / Alert Email</label>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">Client Contact / Alert Email</label>
                   <input
                     type="email"
                     placeholder="adops@client.com (optional)"
                     value={clientForm.clientEmail || ''}
                     onChange={(e) => setClientForm({ ...clientForm, clientEmail: e.target.value })}
-                    className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-xs font-medium focus:ring-2 focus:ring-blue-500/20"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white text-xs font-medium text-slate-800 placeholder-slate-400 shadow-2xs transition hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600"
                   />
                 </div>
 
                 <div className="space-y-1.5 sm:col-span-2">
-                  <label className="block text-xs font-bold uppercase text-slate-700">Credentials Mode</label>
-                  <select
-                    value={clientForm.credentialsType}
-                    onChange={(e) => setClientForm({ ...clientForm, credentialsType: e.target.value as any })}
-                    className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-blue-500/20"
-                  >
-                    <option value="GLOBAL_SERVICE_ACCOUNT">Use Active System Service Account (Default)</option>
-                    <option value="CUSTOM_SERVICE_ACCOUNT">Client-Specific Service Account JSON Key</option>
-                    <option value="OAUTH">Client-Specific OAuth Refresh Token</option>
-                  </select>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">Credentials Mode</label>
+                  <div className="relative">
+                    <select
+                      value={clientForm.credentialsType}
+                      onChange={(e) => setClientForm({ ...clientForm, credentialsType: e.target.value as any })}
+                      className="w-full pl-3.5 pr-8 py-2.5 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-800 shadow-2xs appearance-none transition hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 cursor-pointer"
+                    >
+                      <option value="GLOBAL_SERVICE_ACCOUNT">Use Active System Service Account (Default)</option>
+                      <option value="CUSTOM_SERVICE_ACCOUNT">Client-Specific Service Account JSON Key</option>
+                      <option value="OAUTH">Client-Specific OAuth Refresh Token</option>
+                    </select>
+                    <ChevronDown className="w-4 h-4 text-slate-400 pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2" />
+                  </div>
                 </div>
 
                 {clientForm.credentialsType === 'CUSTOM_SERVICE_ACCOUNT' && (
                   <div className="space-y-1.5 sm:col-span-2">
                     <div className="flex items-center justify-between">
-                      <label className="block text-xs font-bold uppercase text-slate-700">Custom Service Account JSON</label>
-                      <label className="cursor-pointer text-xs font-semibold text-blue-600 hover:text-blue-700 flex items-center gap-1">
+                      <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">Custom Service Account JSON</label>
+                      <label className="cursor-pointer inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-700">
                         <Upload className="w-3.5 h-3.5" />
                         <span>Upload .json</span>
                         <input
@@ -3494,32 +3552,32 @@ export const SettingsPage: React.FC = () => {
                       placeholder='Paste JSON containing "client_email" and "private_key"...'
                       value={clientForm.serviceAccountKey || ''}
                       onChange={(e) => setClientForm({ ...clientForm, serviceAccountKey: e.target.value })}
-                      className="w-full px-3.5 py-2 rounded-xl border border-slate-300 font-mono text-[11px] focus:ring-2 focus:ring-blue-500/20"
+                      className="w-full p-3 rounded-xl border border-slate-200 bg-white font-mono text-[11px] text-slate-800 placeholder-slate-400 shadow-2xs transition hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600"
                     />
                   </div>
                 )}
 
                 {clientForm.credentialsType === 'OAUTH' && (
                   <div className="space-y-1.5 sm:col-span-2">
-                    <label className="block text-xs font-bold uppercase text-slate-700">OAuth Refresh Token</label>
+                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">OAuth Refresh Token</label>
                     <input
                       type="password"
                       placeholder="Enter client refresh token..."
                       value={clientForm.refreshToken || ''}
                       onChange={(e) => setClientForm({ ...clientForm, refreshToken: e.target.value })}
-                      className="w-full px-3.5 py-2 rounded-xl border border-slate-300 font-mono text-xs focus:ring-2 focus:ring-blue-500/20"
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white font-mono text-xs text-slate-800 placeholder-slate-400 shadow-2xs transition hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600"
                     />
                   </div>
                 )}
 
                 <div className="space-y-1.5 sm:col-span-2">
-                  <label className="block text-xs font-bold uppercase text-slate-700">Notes & Description</label>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">Notes & Description</label>
                   <textarea
                     rows={2}
                     placeholder="Add operational notes or billing information for this client account..."
                     value={clientForm.notes || ''}
                     onChange={(e) => setClientForm({ ...clientForm, notes: e.target.value })}
-                    className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-xs focus:ring-2 focus:ring-blue-500/20"
+                    className="w-full p-3 rounded-xl border border-slate-200 bg-white text-xs text-slate-800 placeholder-slate-400 shadow-2xs transition hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600"
                   />
                 </div>
               </div>
@@ -3790,62 +3848,70 @@ export const SettingsPage: React.FC = () => {
               </button>
             </div>
 
-            <form onSubmit={handleSaveEditClient} className="space-y-3.5">
+            <form onSubmit={handleSaveEditClient} className="space-y-4">
               <div className="space-y-1.5">
-                <label className="block text-xs font-bold uppercase text-slate-700">Client / Account Name</label>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">
+                  Client / Account Name <span className="text-rose-500">*</span>
+                </label>
                 <input
                   type="text"
                   required
                   value={editClientForm.clientName}
                   onChange={(e) => setEditClientForm({ ...editClientForm, clientName: e.target.value })}
-                  className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-xs font-medium focus:ring-2 focus:ring-blue-500/20"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white text-xs font-medium text-slate-800 placeholder-slate-400 shadow-2xs transition hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
-                  <label className="block text-xs font-bold uppercase text-slate-700">Account Status</label>
-                  <select
-                    value={editClientForm.status}
-                    onChange={(e) => setEditClientForm({ ...editClientForm, status: e.target.value as any })}
-                    className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-blue-500/20"
-                  >
-                    <option value="ACTIVE">ACTIVE</option>
-                    <option value="INACTIVE">INACTIVE</option>
-                  </select>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">Account Status</label>
+                  <div className="relative">
+                    <select
+                      value={editClientForm.status}
+                      onChange={(e) => setEditClientForm({ ...editClientForm, status: e.target.value as any })}
+                      className="w-full pl-3.5 pr-8 py-2.5 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-800 shadow-2xs appearance-none transition hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 cursor-pointer"
+                    >
+                      <option value="ACTIVE">ACTIVE</option>
+                      <option value="INACTIVE">INACTIVE</option>
+                    </select>
+                    <ChevronDown className="w-4 h-4 text-slate-400 pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2" />
+                  </div>
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="block text-xs font-bold uppercase text-slate-700">Credentials Mode</label>
-                  <select
-                    value={editClientForm.credentialsType}
-                    onChange={(e) => setEditClientForm({ ...editClientForm, credentialsType: e.target.value as any })}
-                    className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-blue-500/20"
-                  >
-                    <option value="GLOBAL_SERVICE_ACCOUNT">Global Service Account</option>
-                    <option value="CUSTOM_SERVICE_ACCOUNT">Custom Key</option>
-                    <option value="OAUTH">Custom OAuth</option>
-                  </select>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">Credentials Mode</label>
+                  <div className="relative">
+                    <select
+                      value={editClientForm.credentialsType}
+                      onChange={(e) => setEditClientForm({ ...editClientForm, credentialsType: e.target.value as any })}
+                      className="w-full pl-3.5 pr-8 py-2.5 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-800 shadow-2xs appearance-none transition hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 cursor-pointer"
+                    >
+                      <option value="GLOBAL_SERVICE_ACCOUNT">Global Service Account</option>
+                      <option value="CUSTOM_SERVICE_ACCOUNT">Custom Key</option>
+                      <option value="OAUTH">Custom OAuth</option>
+                    </select>
+                    <ChevronDown className="w-4 h-4 text-slate-400 pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2" />
+                  </div>
                 </div>
               </div>
 
               <div className="space-y-1.5">
-                <label className="block text-xs font-bold uppercase text-slate-700">Client Contact / Alert Email</label>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">Client Contact / Alert Email</label>
                 <input
                   type="email"
                   value={editClientForm.clientEmail}
                   onChange={(e) => setEditClientForm({ ...editClientForm, clientEmail: e.target.value })}
-                  className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-xs focus:ring-2 focus:ring-blue-500/20"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white text-xs font-medium text-slate-800 placeholder-slate-400 shadow-2xs transition hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600"
                 />
               </div>
 
               <div className="space-y-1.5">
-                <label className="block text-xs font-bold uppercase text-slate-700">Notes & Operational Details</label>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">Notes & Operational Details</label>
                 <textarea
                   rows={2}
                   value={editClientForm.notes}
                   onChange={(e) => setEditClientForm({ ...editClientForm, notes: e.target.value })}
-                  className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-xs focus:ring-2 focus:ring-blue-500/20"
+                  className="w-full p-3 rounded-xl border border-slate-200 bg-white text-xs text-slate-800 placeholder-slate-400 shadow-2xs transition hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600"
                 />
               </div>
 

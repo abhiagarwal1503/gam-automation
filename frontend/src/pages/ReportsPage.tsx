@@ -30,6 +30,9 @@ import {
 } from 'lucide-react';
 import { api } from '../services/api';
 import { MANAGED_NETWORKS, NETWORK_ADVERTISERS } from '../constants/networks';
+import { SearchInput } from '../components/SearchInput';
+import { SearchDropdown } from '../components/SearchDropdown';
+import { DatePicker } from '../components/DatePicker';
 
 const GAM_NETWORKS = [
   { name: 'All Networks', code: 'all' },
@@ -58,7 +61,8 @@ const DATE_RANGE_OPTIONS = [
   { code: 'today', label: 'Today' },
   { code: '7d', label: 'Last 7 Days' },
   { code: '30d', label: 'Last 30 Days' },
-  { code: 'mtd', label: 'This Month' }
+  { code: 'mtd', label: 'This Month' },
+  { code: 'custom', label: 'Custom Range...' }
 ];
 
 const STATUS_OPTIONS = [
@@ -82,6 +86,8 @@ export const ReportsPage: React.FC = () => {
   const [selectedAdSlot, setSelectedAdSlot] = useState<string>('all');
   const [selectedAdvertiser, setSelectedAdvertiser] = useState<string>('all');
   const [selectedDateRange, setSelectedDateRange] = useState<string>('all');
+  const [customStartDate, setCustomStartDate] = useState<string>('');
+  const [customEndDate, setCustomEndDate] = useState<string>('');
   const [selectedStatus, setSelectedStatus] = useState<string>('all');
 
   // Modal for Client Proof-of-Performance Certificate
@@ -100,6 +106,31 @@ export const ReportsPage: React.FC = () => {
     return Array.from(uniqueMap.values());
   }, [selectedNetwork]);
 
+  const networkOptions = React.useMemo(() => [
+    { value: 'all', label: 'All Networks' },
+    ...GAM_NETWORKS.filter(n => n.code !== 'all').map(n => ({
+      value: n.code,
+      label: n.name,
+      sublabel: `ID: ${n.code}`,
+      badge: n.code
+    }))
+  ], []);
+
+  const advertiserOptions = React.useMemo(() => [
+    { value: 'all', label: 'All Verified Advertisers' },
+    ...availableAdvertisers.map(adv => ({
+      value: adv.name,
+      label: adv.name,
+      sublabel: adv.networkName ? `${adv.networkName} (${adv.networkCode})` : undefined
+    }))
+  ], [availableAdvertisers]);
+
+  const slotOptions = React.useMemo(() => STANDARD_AD_SLOTS.map(slot => ({
+    value: slot.code,
+    label: slot.name,
+    sublabel: slot.code === 'all' ? 'Any size / placement' : slot.code
+  })), []);
+
   const fetchReports = async () => {
     setLoading(true);
     try {
@@ -107,7 +138,7 @@ export const ReportsPage: React.FC = () => {
         networkCode: selectedNetwork,
         adSlot: selectedAdSlot,
         advertiser: selectedAdvertiser,
-        dateRange: selectedDateRange,
+        dateRange: selectedDateRange === 'custom' ? 'all' : selectedDateRange,
         status: selectedStatus
       });
       setReports(res.data || []);
@@ -194,11 +225,34 @@ export const ReportsPage: React.FC = () => {
     setCertificateModalOpen(true);
   };
 
-  const filtered = reports.filter(r =>
-    r.advertiserName.toLowerCase().includes(search.toLowerCase()) ||
-    r.campaignId.toLowerCase().includes(search.toLowerCase()) ||
-    (r.adSlot && r.adSlot.toLowerCase().includes(search.toLowerCase()))
-  );
+  const filtered = reports.filter(r => {
+    const matchesSearch =
+      r.advertiserName.toLowerCase().includes(search.toLowerCase()) ||
+      r.campaignId.toLowerCase().includes(search.toLowerCase()) ||
+      (r.adSlot && r.adSlot.toLowerCase().includes(search.toLowerCase()));
+
+    if (!matchesSearch) return false;
+
+    if (selectedDateRange === 'custom') {
+      if (customStartDate && r.startDate && r.startDate < customStartDate) return false;
+      if (customEndDate && r.endDate && r.endDate > customEndDate) return false;
+    }
+
+    return true;
+  });
+
+  const hasActiveFilters = selectedNetwork !== 'all' || selectedAdSlot !== 'all' || selectedAdvertiser !== 'all' || selectedDateRange !== 'all' || selectedStatus !== 'all' || search !== '' || customStartDate !== '' || customEndDate !== '';
+
+  const handleResetFilters = () => {
+    setSelectedNetwork('all');
+    setSelectedAdSlot('all');
+    setSelectedAdvertiser('all');
+    setSelectedDateRange('all');
+    setSelectedStatus('all');
+    setCustomStartDate('');
+    setCustomEndDate('');
+    setSearch('');
+  };
 
   // Maximum impression value in daily trends for bar scaling
   const maxTrendImpressions = dailyTrends.length > 0
@@ -252,77 +306,54 @@ export const ReportsPage: React.FC = () => {
 
       {/* Primary Filter Bar */}
       <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-xs space-y-4">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-3.5 items-center">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-3.5 items-end">
           {/* GAM Network */}
-          <div className="lg:col-span-4 space-y-1.5">
-            <label className="text-xs font-bold uppercase tracking-wider text-slate-600 flex items-center gap-1.5">
-              <Radio className="w-3.5 h-3.5 text-blue-600" />
-              GAM Network
-            </label>
-            <select
+          <div className="lg:col-span-3">
+            <SearchDropdown
+              label="GAM Network"
+              icon={Radio}
+              options={networkOptions}
               value={selectedNetwork}
-              onChange={(e) => setSelectedNetwork(e.target.value)}
-              className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs font-semibold text-slate-800 bg-white focus:ring-2 focus:ring-blue-500/20"
-            >
-              {GAM_NETWORKS.map(net => (
-                <option key={net.code} value={net.code}>
-                  {net.name}
-                </option>
-              ))}
-            </select>
+              onChange={setSelectedNetwork}
+              placeholder="All Networks"
+            />
           </div>
 
           {/* Advertiser Filter */}
-          <div className="lg:col-span-3 space-y-1.5">
-            <label className="text-xs font-bold uppercase tracking-wider text-slate-600 flex items-center gap-1.5">
-              <Layers className="w-3.5 h-3.5 text-purple-600" />
-              Advertiser
-            </label>
-            <select
+          <div className="lg:col-span-3">
+            <SearchDropdown
+              label="Advertiser"
+              icon={Layers}
+              options={advertiserOptions}
               value={selectedAdvertiser}
-              onChange={(e) => setSelectedAdvertiser(e.target.value)}
-              className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs font-semibold text-slate-800 bg-white focus:ring-2 focus:ring-blue-500/20"
-            >
-              <option value="all">All Verified Advertisers</option>
-              {availableAdvertisers.map(adv => (
-                <option key={adv.id || adv.name} value={adv.name}>
-                  {adv.name}
-                </option>
-              ))}
-            </select>
+              onChange={setSelectedAdvertiser}
+              placeholder="All Verified Advertisers"
+            />
           </div>
 
           {/* Ad Slot / Size */}
-          <div className="lg:col-span-3 space-y-1.5">
-            <label className="text-xs font-bold uppercase tracking-wider text-slate-600 flex items-center gap-1.5">
-              <Grid className="w-3.5 h-3.5 text-indigo-600" />
-              Ad Placement & Size
-            </label>
-            <select
+          <div className="lg:col-span-3">
+            <SearchDropdown
+              label="Ad Placement & Size"
+              icon={Grid}
+              options={slotOptions}
               value={selectedAdSlot}
-              onChange={(e) => setSelectedAdSlot(e.target.value)}
-              className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs font-semibold text-slate-800 bg-white focus:ring-2 focus:ring-blue-500/20"
-            >
-              {STANDARD_AD_SLOTS.map(slot => (
-                <option key={slot.code} value={slot.code}>
-                  {slot.name}
-                </option>
-              ))}
-            </select>
+              onChange={setSelectedAdSlot}
+              placeholder="All Ad Slots & Sizes"
+            />
           </div>
 
           {/* Search box */}
-          <div className="lg:col-span-2 space-y-1.5">
-            <label className="text-xs font-bold uppercase tracking-wider text-slate-600 flex items-center gap-1.5">
+          <div className="lg:col-span-3">
+            <label className="text-xs font-bold uppercase tracking-wider text-slate-600 flex items-center gap-1.5 mb-1.5">
               <Search className="w-3.5 h-3.5 text-slate-400" />
               Search Filter
             </label>
-            <input
-              type="text"
-              placeholder="Search by ID or name..."
+            <SearchInput
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs text-slate-800 focus:ring-2 focus:ring-blue-500/20"
+              onChange={setSearch}
+              placeholder="Search by ID, advertiser, slot..."
+              resultCount={filtered.length}
             />
           </div>
         </div>
@@ -350,27 +381,88 @@ export const ReportsPage: React.FC = () => {
             ))}
           </div>
 
-          {/* Status Pills */}
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <span className="font-semibold text-slate-500 flex items-center gap-1 mr-1">
-              <Filter className="w-3.5 h-3.5 text-slate-400" />
-              Status:
-            </span>
-            {STATUS_OPTIONS.map(opt => (
+          {/* Status Pills & Reset Filter Button */}
+          <div className="flex items-center gap-3 flex-wrap">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="font-semibold text-slate-500 flex items-center gap-1 mr-1">
+                <Filter className="w-3.5 h-3.5 text-slate-400" />
+                Status:
+              </span>
+              {STATUS_OPTIONS.map(opt => (
+                <button
+                  key={opt.code}
+                  onClick={() => setSelectedStatus(opt.code)}
+                  className={`px-3 py-1.5 rounded-lg font-medium transition ${
+                    selectedStatus === opt.code
+                      ? 'bg-indigo-600 text-white shadow-xs'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+
+            {hasActiveFilters && (
               <button
-                key={opt.code}
-                onClick={() => setSelectedStatus(opt.code)}
-                className={`px-3 py-1.5 rounded-lg font-medium transition ${
-                  selectedStatus === opt.code
-                    ? 'bg-indigo-600 text-white shadow-xs'
-                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                }`}
+                onClick={handleResetFilters}
+                className="flex items-center gap-1 text-xs text-rose-600 hover:text-rose-700 font-semibold px-2.5 py-1 rounded-lg hover:bg-rose-50 transition"
               >
-                {opt.label}
+                <X className="w-3.5 h-3.5" />
+                Reset Filters
               </button>
-            ))}
+            )}
           </div>
         </div>
+
+        {/* Collapsible Custom Date Range Picker */}
+        {selectedDateRange === 'custom' && (
+          <div className="p-4 bg-slate-50/80 rounded-2xl border border-blue-200 space-y-3 animate-fade-in">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                <Calendar className="w-4 h-4 text-blue-600" />
+                Select Custom Reporting Period
+              </span>
+              {(customStartDate || customEndDate) && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCustomStartDate('');
+                    setCustomEndDate('');
+                  }}
+                  className="text-[11px] text-slate-500 hover:text-slate-800 font-medium"
+                >
+                  Clear dates
+                </button>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <DatePicker
+                label="Report Start Date"
+                value={customStartDate}
+                onChange={setCustomStartDate}
+                placeholder="From date"
+                presets={[
+                  { label: 'Today', daysOffset: 0 },
+                  { label: '1st of Month', calculate: () => new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0] }
+                ]}
+              />
+              <DatePicker
+                label="Report End Date"
+                value={customEndDate}
+                onChange={setCustomEndDate}
+                min={customStartDate}
+                placeholder="To date"
+                presets={[
+                  { label: '+7 Days', daysOffset: 7 },
+                  { label: '+30 Days', daysOffset: 30 },
+                  { label: 'End of Month', calculate: () => new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).toISOString().split('T')[0] }
+                ]}
+              />
+            </div>
+          </div>
+        )}
       </div>
 
       {/* KPI Cards */}

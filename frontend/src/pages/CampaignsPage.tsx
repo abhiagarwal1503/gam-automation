@@ -1,10 +1,28 @@
 import React, { useEffect, useState } from 'react';
-import { Megaphone, PlusCircle, Search, RefreshCw, Filter, ArrowUpRight, Trash2, Upload, Layers, Building2 } from 'lucide-react';
+import {
+  Megaphone,
+  PlusCircle,
+  Search,
+  RefreshCw,
+  Filter,
+  ArrowUpRight,
+  Trash2,
+  Upload,
+  Layers,
+  Building2,
+  Calendar,
+  Clock,
+  RotateCcw,
+  X
+} from 'lucide-react';
 import { api } from '../services/api';
 import { Campaign, CampaignStatus } from '../types';
 import { BulkBannerChangeModal } from '../components/BulkBannerChangeModal';
 import { useAuth } from '../context/AuthContext';
 import { NETWORK_ADVERTISERS } from '../constants/networks';
+import { SearchInput } from '../components/SearchInput';
+import { SearchDropdown, DropdownOption } from '../components/SearchDropdown';
+import { DatePicker } from '../components/DatePicker';
 
 interface CampaignsPageProps {
   onSelectCampaign: (id: string) => void;
@@ -19,6 +37,9 @@ export const CampaignsPage: React.FC<CampaignsPageProps> = ({ onSelectCampaign, 
   const [search, setSearch] = useState<string>('');
   const [filterStatus, setFilterStatus] = useState<string>('ALL');
   const [filterAdvertiser, setFilterAdvertiser] = useState<string>('ALL');
+  const [filterDateRange, setFilterDateRange] = useState<'ALL' | 'ACTIVE_TODAY' | 'NEXT_7_DAYS' | 'THIS_MONTH' | 'CUSTOM'>('ALL');
+  const [customStartDate, setCustomStartDate] = useState<string>('');
+  const [customEndDate, setCustomEndDate] = useState<string>('');
   const [activeBannerCampaign, setActiveBannerCampaign] = useState<Campaign | null>(null);
 
   useEffect(() => {
@@ -86,8 +107,44 @@ export const CampaignsPage: React.FC<CampaignsPageProps> = ({ onSelectCampaign, 
     const matchesAdvertiser = isAdvertiserScoped
       ? (c.advertiserName.toLowerCase() === user?.advertiserName?.toLowerCase())
       : (filterAdvertiser === 'ALL' || c.advertiserName.toLowerCase() === filterAdvertiser.toLowerCase());
-    return matchesSearch && matchesStatus && matchesAdvertiser;
+
+    // Date range filtering
+    let matchesDate = true;
+    const today = new Date().toISOString().split('T')[0];
+    if (filterDateRange === 'ACTIVE_TODAY') {
+      matchesDate = c.startDate <= today && c.endDate >= today;
+    } else if (filterDateRange === 'NEXT_7_DAYS') {
+      const nextWeek = new Date();
+      nextWeek.setDate(nextWeek.getDate() + 7);
+      const nextWeekStr = nextWeek.toISOString().split('T')[0];
+      matchesDate = c.startDate <= nextWeekStr && c.endDate >= today;
+    } else if (filterDateRange === 'THIS_MONTH') {
+      const now = new Date();
+      const firstDay = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+      const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
+      matchesDate = c.startDate <= lastDay && c.endDate >= firstDay;
+    } else if (filterDateRange === 'CUSTOM') {
+      if (customStartDate && c.endDate < customStartDate) matchesDate = false;
+      if (customEndDate && c.startDate > customEndDate) matchesDate = false;
+    }
+
+    return matchesSearch && matchesStatus && matchesAdvertiser && matchesDate;
   });
+
+  const hasActiveFilters = search.trim().length > 0 ||
+    filterStatus !== 'ALL' ||
+    (!isAdvertiserScoped && filterAdvertiser !== 'ALL') ||
+    filterDateRange !== 'ALL' ||
+    Boolean(customStartDate || customEndDate);
+
+  const resetAllFilters = () => {
+    setSearch('');
+    setFilterStatus('ALL');
+    if (!isAdvertiserScoped) setFilterAdvertiser('ALL');
+    setFilterDateRange('ALL');
+    setCustomStartDate('');
+    setCustomEndDate('');
+  };
 
   return (
     <div className="space-y-6">
@@ -131,56 +188,135 @@ export const CampaignsPage: React.FC<CampaignsPageProps> = ({ onSelectCampaign, 
         </div>
       )}
 
-      {/* Filter and Search Bar */}
-      <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col sm:flex-row gap-4 items-center justify-between">
-        <div className="relative w-full sm:w-80">
-          <Search className="w-4 h-4 absolute left-3.5 top-3 text-slate-400" />
-          <input
-            type="text"
-            placeholder="Search by advertiser, campaign title, or ID..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 text-xs rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600"
-          />
-        </div>
+      {/* Filter, Search, and Date Toolbar */}
+      <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+        <div className="flex flex-col lg:flex-row gap-3 items-stretch lg:items-center justify-between">
+          {/* Main Search Input */}
+          <div className="flex-1 max-w-xl">
+            <SearchInput
+              value={search}
+              onChange={setSearch}
+              placeholder="Search by advertiser, campaign custom name, or ID..."
+              resultCount={filtered.length}
+            />
+          </div>
 
-        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
-          {/* Advertiser Filter */}
-          {!isAdvertiserScoped && (
-            <div className="flex items-center gap-1.5">
-              <Layers className="w-4 h-4 text-slate-400" />
-              <select
-                value={filterAdvertiser}
-                onChange={(e) => setFilterAdvertiser(e.target.value)}
-                className="px-3 py-2 text-xs rounded-xl border border-slate-200 bg-white font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-              >
-                <option value="ALL">All Advertisers</option>
-                {availableAdvertisers.map(adv => (
-                  <option key={adv} value={adv}>{adv}</option>
-                ))}
-              </select>
+          {/* Filter Dropdowns */}
+          <div className="flex flex-wrap items-center gap-2.5">
+            {/* Advertiser Filter */}
+            {!isAdvertiserScoped && (
+              <div className="w-full sm:w-56">
+                <SearchDropdown
+                  value={filterAdvertiser}
+                  onChange={setFilterAdvertiser}
+                  options={[
+                    { value: 'ALL', label: 'All Advertisers', icon: Layers },
+                    ...availableAdvertisers.map(adv => ({
+                      value: adv,
+                      label: adv,
+                      icon: Building2
+                    }))
+                  ]}
+                  searchPlaceholder="Filter advertisers..."
+                />
+              </div>
+            )}
+
+            {/* Status Filter */}
+            <div className="w-full sm:w-44">
+              <SearchDropdown
+                value={filterStatus}
+                onChange={setFilterStatus}
+                searchable={false}
+                options={[
+                  { value: 'ALL', label: 'All Statuses', icon: Filter },
+                  { value: 'READY', label: 'READY', badge: 'Active', badgeColor: 'bg-emerald-100 text-emerald-800' },
+                  { value: 'VALIDATING', label: 'VALIDATING', badge: 'Checking', badgeColor: 'bg-blue-100 text-blue-800' },
+                  { value: 'CREATING_ADVERTISER', label: 'CREATING ADV', badge: 'Creating', badgeColor: 'bg-purple-100 text-purple-800' },
+                  { value: 'CREATING_ORDER', label: 'CREATING ORDER', badge: 'Creating', badgeColor: 'bg-purple-100 text-purple-800' },
+                  { value: 'CREATING_LINE_ITEM', label: 'CREATING LICA', badge: 'Creating', badgeColor: 'bg-purple-100 text-purple-800' },
+                  { value: 'PAUSED', label: 'PAUSED', badge: 'Paused', badgeColor: 'bg-amber-100 text-amber-800' },
+                  { value: 'FAILED', label: 'FAILED', badge: 'Failed', badgeColor: 'bg-rose-100 text-rose-800' }
+                ]}
+              />
             </div>
-          )}
 
-          {/* Status Filter */}
-          <div className="flex items-center gap-1.5">
-            <Filter className="w-4 h-4 text-slate-400" />
-            <select
-              value={filterStatus}
-              onChange={(e) => setFilterStatus(e.target.value)}
-              className="px-3 py-2 text-xs rounded-xl border border-slate-200 bg-white font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-            >
-              <option value="ALL">All Statuses</option>
-              <option value="READY">READY</option>
-              <option value="VALIDATING">VALIDATING</option>
-              <option value="CREATING_ADVERTISER">CREATING ADVERTISER</option>
-              <option value="CREATING_ORDER">CREATING ORDER</option>
-              <option value="CREATING_LINE_ITEM">CREATING LINE ITEM</option>
-              <option value="PAUSED">PAUSED</option>
-              <option value="FAILED">FAILED</option>
-            </select>
+            {/* Reset All Filters Button */}
+            {hasActiveFilters && (
+              <button
+                type="button"
+                onClick={resetAllFilters}
+                className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-600 hover:text-slate-900 text-xs font-semibold transition"
+                title="Reset all active search and filter criteria"
+              >
+                <RotateCcw className="w-3.5 h-3.5 text-slate-400" />
+                <span>Reset</span>
+              </button>
+            )}
           </div>
         </div>
+
+        {/* Date Filter Pills Section */}
+        <div className="pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3 text-xs">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="font-bold uppercase tracking-wider text-[11px] text-slate-500 flex items-center gap-1 mr-1">
+              <Calendar className="w-3.5 h-3.5 text-blue-600" />
+              Flight Period:
+            </span>
+            {[
+              { id: 'ALL', label: 'All Dates' },
+              { id: 'ACTIVE_TODAY', label: 'Active Today' },
+              { id: 'NEXT_7_DAYS', label: 'Next 7 Days' },
+              { id: 'THIS_MONTH', label: 'This Month' },
+              { id: 'CUSTOM', label: 'Custom Range...' }
+            ].map(pill => (
+              <button
+                key={pill.id}
+                type="button"
+                onClick={() => setFilterDateRange(pill.id as any)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+                  filterDateRange === pill.id
+                    ? 'bg-blue-600 text-white shadow-xs'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                {pill.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="text-[11px] text-slate-500 font-medium">
+            Showing <strong>{filtered.length}</strong> of <strong>{campaigns.length}</strong> campaigns
+          </div>
+        </div>
+
+        {/* Custom Date Range Pickers (Active when CUSTOM is chosen) */}
+        {filterDateRange === 'CUSTOM' && (
+          <div className="p-3.5 bg-blue-50/50 border border-blue-200 rounded-xl grid grid-cols-1 sm:grid-cols-2 gap-3 animate-fade-in">
+            <DatePicker
+              label="Flight Starts From"
+              value={customStartDate}
+              onChange={setCustomStartDate}
+              placeholder="Earliest flight start..."
+              presets={[
+                { label: 'Today', daysOffset: 0 },
+                { label: '1st of Month', calculate: () => new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0] }
+              ]}
+            />
+            <DatePicker
+              label="Flight Ends Before"
+              value={customEndDate}
+              min={customStartDate}
+              onChange={setCustomEndDate}
+              placeholder="Latest flight end..."
+              presets={[
+                { label: '+7 Days', daysOffset: 7 },
+                { label: '+30 Days', daysOffset: 30 },
+                { label: 'End of Month', calculate: () => new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).toISOString().split('T')[0] }
+              ]}
+            />
+          </div>
+        )}
       </div>
 
       {/* Campaigns Table */}

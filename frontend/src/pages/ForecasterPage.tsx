@@ -18,6 +18,8 @@ import {
 } from 'lucide-react';
 import { api } from '../services/api';
 import { AdUnit } from '../types';
+import { DatePicker } from '../components/DatePicker';
+import { SearchDropdown } from '../components/SearchDropdown';
 
 const GAM_NETWORKS = [
   { name: 'Blinkcorp Technologies Private Limited', code: '22068249324' },
@@ -173,41 +175,43 @@ export const ForecasterPage: React.FC = () => {
           </div>
 
           {/* Start Date */}
-          <div className="space-y-2">
-            <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">Proposed Start Date</label>
-            <input
-              type="date"
-              value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
-              className="w-full px-4 py-2.5 rounded-xl border border-slate-300 text-sm focus:ring-2 focus:ring-blue-500/20"
-            />
-          </div>
+          <DatePicker
+            label="Proposed Start Date"
+            value={startDate}
+            onChange={(val) => setStartDate(val)}
+            presets={[
+              { label: 'Today', daysOffset: 0 },
+              { label: 'Tomorrow', daysOffset: 1 },
+              { label: '+7 Days', daysOffset: 7 }
+            ]}
+          />
 
           {/* End Date */}
-          <div className="space-y-2">
-            <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">Proposed End Date</label>
-            <input
-              type="date"
-              value={endDate}
-              onChange={(e) => setEndDate(e.target.value)}
-              className="w-full px-4 py-2.5 rounded-xl border border-slate-300 text-sm focus:ring-2 focus:ring-blue-500/20"
-            />
-          </div>
+          <DatePicker
+            label="Proposed End Date"
+            min={startDate}
+            value={endDate}
+            onChange={(val) => setEndDate(val)}
+            presets={[
+              { label: '+7 Days', daysOffset: 7 },
+              { label: '+14 Days', daysOffset: 14 },
+              { label: '+30 Days', daysOffset: 30 }
+            ]}
+          />
 
           {/* Line Item Type */}
-          <div className="space-y-2">
-            <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">Line Item Type</label>
-            <select
-              value={lineItemType}
-              onChange={(e) => setLineItemType(e.target.value)}
-              className="w-full px-4 py-2.5 rounded-xl border border-slate-300 text-sm font-semibold focus:ring-2 focus:ring-blue-500/20"
-            >
-              <option value="SPONSORSHIP">SPONSORSHIP (Priority 4 - Guaranteed 100%)</option>
-              <option value="STANDARD">STANDARD (Priority 8 - Volume Goal)</option>
-              <option value="NETWORK">NETWORK (Priority 12 - Remnant)</option>
-              <option value="HOUSE">HOUSE (Priority 16 - Internal)</option>
-            </select>
-          </div>
+          <SearchDropdown
+            label="Line Item Type"
+            value={lineItemType}
+            onChange={(val) => setLineItemType(val as any)}
+            searchable={false}
+            options={[
+              { value: 'SPONSORSHIP', label: 'SPONSORSHIP', sublabel: 'Priority 4 - Guaranteed 100% SOV', badge: 'Guaranteed', badgeColor: 'bg-blue-100 text-blue-800' },
+              { value: 'STANDARD', label: 'STANDARD', sublabel: 'Priority 8 - Volume Delivery Goal', badge: 'Standard', badgeColor: 'bg-slate-100 text-slate-800' },
+              { value: 'NETWORK', label: 'NETWORK', sublabel: 'Priority 12 - Remnant Backfill', badge: 'Remnant', badgeColor: 'bg-amber-100 text-amber-800' },
+              { value: 'HOUSE', label: 'HOUSE', sublabel: 'Priority 16 - Internal Inventory', badge: 'House', badgeColor: 'bg-purple-100 text-purple-800' }
+            ]}
+          />
 
           {/* Action Button */}
           <div className="flex items-end">

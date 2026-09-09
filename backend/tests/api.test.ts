@@ -43,7 +43,8 @@ describe('Backend API Endpoints', () => {
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
     expect(res.body.data.headCode).toContain('googletag.defineSlot');
-    expect(res.body.data.bodyCode).toContain('<div id="');
+    expect(res.body.data.bodyCode).toContain('id=');
+    expect(res.body.data.bodyCode).toContain('div-gpt-ad');
   });
 
   test('GET /api/settings returns configuration with masked secrets', async () => {
