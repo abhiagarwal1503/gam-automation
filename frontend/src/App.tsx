@@ -15,8 +15,91 @@ import { ForecasterPage } from './pages/ForecasterPage';
 import { LogsPage } from './pages/LogsPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { PasswordChangeModal } from './components/PasswordChangeModal';
+import { SEO } from './components/SEO';
 import { api } from './services/api';
 import { RefreshCw } from 'lucide-react';
+
+const TAB_SEO_CONFIG: Record<
+  string,
+  {
+    title: string;
+    description: string;
+    canonicalPath: string;
+    robots?: string;
+    breadcrumbs: Array<{ name: string; item: string }>;
+  }
+> = {
+  dashboard: {
+    title: 'Dashboard Overview',
+    description: 'Monitor automated campaign health, orders, inventory slots, and live Google Ad Manager SOAP API delivery.',
+    canonicalPath: '/dashboard',
+    breadcrumbs: [{ name: 'Dashboard', item: '/dashboard' }]
+  },
+  campaigns: {
+    title: 'Campaign Management',
+    description: 'Browse, manage, and filter automated advertising campaigns across multi-network publishers and advertisers.',
+    canonicalPath: '/campaigns',
+    breadcrumbs: [{ name: 'Campaigns', item: '/campaigns' }]
+  },
+  create: {
+    title: 'Create Automated Campaign',
+    description: 'Launch complete Google Ad Manager campaigns with automatic order approval, sponsorship line items, and banner resizing.',
+    canonicalPath: '/create',
+    breadcrumbs: [{ name: 'Campaigns', item: '/campaigns' }, { name: 'Create', item: '/create' }]
+  },
+  'campaign-detail': {
+    title: 'Campaign Details & GPT Tags',
+    description: 'Inspect campaign orders, line items, creative associations, flight dates, and copy production-ready GPT tags.',
+    canonicalPath: '/campaigns',
+    breadcrumbs: [{ name: 'Campaigns', item: '/campaigns' }, { name: 'Details', item: '/campaigns' }]
+  },
+  'ad-units': {
+    title: 'Ad Units & Inventory Slots',
+    description: 'Explore targeted Google Ad Manager ad units, hierarchies, sizing specifications, and network slot paths.',
+    canonicalPath: '/ad-units',
+    breadcrumbs: [{ name: 'Inventory', item: '/ad-units' }]
+  },
+  advertisers: {
+    title: 'Advertisers Directory',
+    description: 'Manage verified advertiser companies, agencies, and partner network associations in Google Ad Manager.',
+    canonicalPath: '/advertisers',
+    breadcrumbs: [{ name: 'Advertisers', item: '/advertisers' }]
+  },
+  reports: {
+    title: 'Performance Reports & Analytics',
+    description: 'Analyze impressions, clicks, CTR, CPM revenue, device splits, and historical delivery pacing.',
+    canonicalPath: '/reports',
+    robots: 'noindex, nofollow',
+    breadcrumbs: [{ name: 'Reports', item: '/reports' }]
+  },
+  forecaster: {
+    title: 'Inventory Forecaster & Availability',
+    description: 'Forecast inventory availability, impression capacity, and contention across ad placements.',
+    canonicalPath: '/forecaster',
+    robots: 'noindex, nofollow',
+    breadcrumbs: [{ name: 'Forecaster', item: '/forecaster' }]
+  },
+  'gpt-generator': {
+    title: 'Google Publisher Tag (GPT) Generator',
+    description: 'Generate production-ready Google Publisher Tag code snippets with Hocalwire infinite scroll syntax.',
+    canonicalPath: '/gpt-generator',
+    breadcrumbs: [{ name: 'Tools', item: '/gpt-generator' }, { name: 'GPT Generator', item: '/gpt-generator' }]
+  },
+  logs: {
+    title: 'GAM API Telemetry & Audit Logs',
+    description: 'Live audit log of SOAP and REST requests executed against Google Ad Manager endpoints.',
+    canonicalPath: '/logs',
+    robots: 'noindex, nofollow',
+    breadcrumbs: [{ name: 'System', item: '/logs' }, { name: 'API Logs', item: '/logs' }]
+  },
+  settings: {
+    title: 'System Settings & Network Codes',
+    description: 'Manage Google Ad Manager network codes, user permissions, audit logs, and CMS sync integrations.',
+    canonicalPath: '/settings',
+    robots: 'noindex, nofollow',
+    breadcrumbs: [{ name: 'Admin', item: '/settings' }, { name: 'Settings', item: '/settings' }]
+  }
+};
 
 function AppContent() {
   const { user, isAuthenticated, loading, isAdmin } = useAuth();
@@ -64,8 +147,19 @@ function AppContent() {
     return <LoginPage />;
   }
 
+  const currentSeo = TAB_SEO_CONFIG[effectiveTab] || TAB_SEO_CONFIG['dashboard'];
+
   return (
     <div className="min-h-screen mesh-gradient-bg flex flex-col font-sans selection:bg-blue-600 selection:text-white">
+      {/* Dynamic SEO Meta Tags & Breadcrumbs */}
+      <SEO
+        title={currentSeo.title}
+        description={currentSeo.description}
+        canonicalPath={currentSeo.canonicalPath}
+        robots={currentSeo.robots}
+        breadcrumbs={currentSeo.breadcrumbs}
+      />
+
       {/* Top Navbar */}
       <Navbar
         activeTab={effectiveTab === 'campaign-detail' ? 'campaigns' : effectiveTab}

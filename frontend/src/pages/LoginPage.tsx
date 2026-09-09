@@ -16,6 +16,7 @@ import {
   CheckCircle2
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { SEO } from '../components/SEO';
 
 export const LoginPage: React.FC = () => {
   const { login } = useAuth();
@@ -43,6 +44,12 @@ export const LoginPage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4 sm:p-6 lg:p-8 relative overflow-hidden font-sans selection:bg-blue-600 selection:text-white">
+      <SEO
+        title="Sign In | Secure Portal"
+        description="Sign in to the enterprise Google Ad Manager Automation platform for rapid campaign orchestration, line item targeting, and GPT tag delivery."
+        canonicalPath="/login"
+        breadcrumbs={[{ name: 'Login', item: '/login' }]}
+      />
       {/* Background glow effects */}
       <div className="absolute top-1/4 -left-48 w-96 h-96 bg-blue-600/20 rounded-full blur-[128px] pointer-events-none" />
       <div className="absolute bottom-1/4 -right-48 w-96 h-96 bg-indigo-600/20 rounded-full blur-[128px] pointer-events-none" />

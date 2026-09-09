@@ -1,0 +1,19 @@
+{
+  "short_name": "GAM Auto",
+  "name": "Google Ad Manager Ad Automation Platform",
+  "description": "Enterprise ad trafficking & campaign orchestration platform automating Orders, Line Items, Creatives, LICAs, and GPT tags.",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "type": "image/svg+xml",
+      "sizes": "192x192 512x512",
+      "purpose": "any maskable"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#020617",
+  "theme_color": "#0f172a",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "categories": ["business", "productivity", "utilities"]
+}

@@ -1,0 +1,29 @@
+# https://www.robotstxt.org/robotstxt.html
+# Robots exclusion file for Google Ad Manager Automation Platform
+
+User-agent: *
+Allow: /
+Allow: /login
+Allow: /dashboard
+Allow: /campaigns
+Allow: /create
+Allow: /ad-units
+Allow: /advertisers
+Allow: /gpt-generator
+Allow: /reports
+Allow: /manifest.json
+Allow: /favicon.svg
+Allow: /og-image.svg
+
+# Disallow internal API endpoints and sensitive auth operations from bot crawling
+Disallow: /api/
+Disallow: /api/auth/
+Disallow: /api/admin/
+Disallow: /api/campaigns/
+Disallow: /api/live/
+
+# Crawl-delay for polite crawling
+Crawl-delay: 1
+
+# Search engine sitemap location
+Sitemap: https://gam-automation.example.com/sitemap.xml
