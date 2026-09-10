@@ -18,6 +18,22 @@ export type CampaignStatus =
   | 'PAUSED'
   | 'COMPLETED';
 
+export type LineItemType =
+  | 'STANDARD'
+  | 'SPONSORSHIP'
+  | 'NETWORK'
+  | 'BULK'
+  | 'PRICE_PRIORITY'
+  | 'HOUSE';
+
+export type CreativeType =
+  | 'IMAGE'
+  | 'HTML5'
+  | 'THIRD_PARTY'
+  | 'INTERNAL_REDIRECT'
+  | 'CUSTOM'
+  | 'NATIVE';
+
 export interface AdSize {
   width: number;
   height: number;
@@ -86,6 +102,7 @@ export interface Creative {
   targetUrl: string;
   width: number;
   height: number;
+  creativeType?: CreativeType;
   status: string;
   createdAt: string;
   updatedAt: string;
@@ -134,6 +151,20 @@ export interface Campaign {
   googleErrorDetails?: string;
   suggestedAction?: string;
   isDryRun: boolean;
+  lineItemType?: LineItemType;
+  creativeType?: CreativeType;
+  assetsMap?: Record<string, string>;
+  thirdPartySnippet?: string;
+  isSafeFrameCompatible?: boolean;
+  cm360Url?: string;
+  customCode?: string;
+  nativeFields?: {
+    headline?: string;
+    body?: string;
+    callToAction?: string;
+    logoUrl?: string;
+    imageUrl?: string;
+  };
   cmsSyncStatus?: string;
   cmsSyncedAt?: string;
   networkCode?: string;

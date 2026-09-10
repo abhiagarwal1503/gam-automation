@@ -5,27 +5,16 @@ import {
   Check,
   Download,
   Eye,
-  Sparkles,
   RefreshCw,
   Smartphone,
   Globe,
-  Radio,
   Layers,
   Zap,
-  FileCode,
   CheckCircle2,
-  Send,
-  Server,
-  Activity,
-  X,
-  ExternalLink,
-  ShieldCheck,
   AlertCircle
 } from 'lucide-react';
-import { api } from '../services/api';
-import { useToast } from '../context/ToastContext';
 import { useAuth } from '../context/AuthContext';
-import { AdSize, CmsPartner, CmsElement, PushDfpResult } from '../types';
+import { AdSize } from '../types';
 
 const GAM_NETWORKS = [
   { name: 'The Federal', code: '22665183713' },
@@ -45,7 +34,6 @@ const PRESET_SLOTS = [
 
 export const GptGeneratorPage: React.FC = () => {
   const { user, isAdmin, isPartnerScoped, activeNetworkCode } = useAuth();
-  const { success: toastSuccess, error: toastError } = useToast();
 
   if (!isAdmin) {
     return (
@@ -74,30 +62,6 @@ export const GptGeneratorPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'code' | 'preview'>('code');
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
-  // CMS Partner Elements & Push State
-  const [partners, setPartners] = useState<CmsPartner[]>([]);
-  const [selectedPartnerId, setSelectedPartnerId] = useState<string>('');
-  const [fetchedElements, setFetchedElements] = useState<CmsElement[]>([]);
-  const [selectedElementId, setSelectedElementId] = useState<string | null>(null);
-  const [fetchingElements, setFetchingElements] = useState<boolean>(false);
-  const [pushingDfp, setPushingDfp] = useState<boolean>(false);
-  const [pushResult, setPushResult] = useState<PushDfpResult | null>(null);
-  const [showPushModal, setShowPushModal] = useState<boolean>(false);
-
-  // Partner-scoped filtering for CMS partners
-  const visiblePartners = isPartnerScoped
-    ? partners.filter(p => {
-        const partnerNameLower = (user?.partnerName || '').toLowerCase();
-        const pNameLower = p.name.toLowerCase();
-        return pNameLower.includes(partnerNameLower) || partnerNameLower.includes(pNameLower) ||
-          (user?.networkCode === '22665183713' && (pNameLower.includes('federal') || p.endpoint.includes('federal'))) ||
-          (user?.networkCode === '22068249324' && (pNameLower.includes('blink') || p.endpoint.includes('blink')));
-      })
-    : partners;
-
-  const effectivePartners = visiblePartners.length > 0 ? visiblePartners : partners;
-  const selectedPartner = effectivePartners.find(p => p.id === selectedPartnerId) || effectivePartners[0];
-
   // Presets scoped to partner
   const visiblePresets = isPartnerScoped
     ? (user?.networkCode === '22665183713'
@@ -113,81 +77,6 @@ export const GptGeneratorPage: React.FC = () => {
       setNetworkCode(activeNetworkCode);
     }
   }, [isPartnerScoped, user?.networkCode, activeNetworkCode]);
-
-  useEffect(() => {
-    api.getCmsPartners().then(pts => {
-      setPartners(pts);
-      const filtered = isPartnerScoped
-        ? pts.filter(p => {
-            const partnerNameLower = (user?.partnerName || '').toLowerCase();
-            const pNameLower = p.name.toLowerCase();
-            return pNameLower.includes(partnerNameLower) || partnerNameLower.includes(pNameLower) ||
-              (user?.networkCode === '22665183713' && (pNameLower.includes('federal') || p.endpoint.includes('federal'))) ||
-              (user?.networkCode === '22068249324' && (pNameLower.includes('blink') || p.endpoint.includes('blink')));
-          })
-        : pts;
-      const initial = filtered.length > 0 ? filtered[0] : pts[0];
-      if (initial) {
-        setSelectedPartnerId(initial.id);
-      }
-    }).catch(err => console.warn('Failed to load CMS partners:', err));
-  }, [isPartnerScoped, user?.partnerName, user?.networkCode]);
-
-  const handleFetchElements = async () => {
-    setFetchingElements(true);
-    try {
-      const res = await api.fetchPartnerElements({ partnerId: selectedPartnerId });
-      setFetchedElements(res.elements);
-      toastSuccess('Elements Fetched', `Retrieved ${res.elements.length} ad placement elements from ${res.targetUrl}`);
-      if (res.elements.length > 0) {
-        handleSelectElement(res.elements[0]);
-      }
-    } catch (err: any) {
-      toastError('Fetch Failed', err.response?.data?.error || err.message);
-    } finally {
-      setFetchingElements(false);
-    }
-  };
-
-  const handleSelectElement = (el: CmsElement) => {
-    setSelectedElementId(el.id);
-    setAdUnitCode(el.slotCode);
-    setWidth(el.width);
-    setHeight(el.height);
-    setDivId(el.divId);
-    if (el.networkCode) {
-      setNetworkCode(el.networkCode);
-    }
-    setTagFormat('hocalwire');
-  };
-
-  const handlePushDfp = async () => {
-    setPushingDfp(true);
-    try {
-      const res = await api.pushElementDfp({
-        partnerId: selectedPartnerId,
-        element: {
-          divId,
-          slotCode: adUnitCode,
-          width,
-          height
-        },
-        networkCode,
-        customSnippet: getCompiledSnippet()
-      });
-      setPushResult(res);
-      setShowPushModal(true);
-      if (res.success) {
-        toastSuccess('DFP Code Pushed', res.message || 'Pushed DFP snippet to partner CMS!');
-      } else {
-        toastError('DFP Push Dispatched', res.message || 'Target partner acknowledged the push.');
-      }
-    } catch (err: any) {
-      toastError('Push Failed', err.response?.data?.error || err.message);
-    } finally {
-      setPushingDfp(false);
-    }
-  };
 
   const handleSlotPreset = (slot: typeof PRESET_SLOTS[0]) => {
     setAdUnitCode(slot.code);
@@ -347,178 +236,7 @@ export const GptGeneratorPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Partner CMS Live Element Inspector & DFP Push Section */}
-      <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 rounded-3xl p-6 text-white shadow-xl border border-indigo-800/40 space-y-5">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-indigo-800/50">
-          <div className="space-y-1">
-            <div className="flex items-center gap-2">
-              <span className="p-1.5 rounded-lg bg-indigo-500/20 text-indigo-400 border border-indigo-500/30">
-                <Server className="w-4 h-4" />
-              </span>
-              <h2 className="text-base font-bold tracking-tight text-white flex items-center gap-2">
-                CMS Partner Live Elements &amp; Direct DFP Push
-              </h2>
-              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                Live Sync Ready
-              </span>
-            </div>
-            <p className="text-xs text-indigo-200/80">
-              Inspect active ad slots live from partner site (<span className="font-mono text-white">{selectedPartner?.endpoint || 'stagingfederalsite.hocalwire.in'}</span>), select any element, and push generated DFP code with authentication token (<span className="font-mono text-emerald-300">s-d</span>).
-            </p>
-          </div>
 
-          {/* Partner Selector & Fetch Button */}
-          <div className="flex flex-wrap items-center gap-2">
-            <select
-              value={selectedPartnerId}
-              onChange={(e) => setSelectedPartnerId(e.target.value)}
-              className="bg-slate-800 border border-indigo-700/60 text-xs text-white rounded-xl px-3 py-2 font-medium focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-            >
-              {effectivePartners.map(p => (
-                <option key={p.id} value={p.id}>
-                  {p.name} ({p.cmsType})
-                </option>
-              ))}
-            </select>
-
-            <button
-              type="button"
-              onClick={handleFetchElements}
-              disabled={fetchingElements}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs font-bold transition shadow-lg shadow-indigo-600/30"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${fetchingElements ? 'animate-spin' : ''}`} />
-              <span>{fetchingElements ? 'Fetching Live...' : 'Fetch Live Elements'}</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Partner Connection Details Bar */}
-        {selectedPartner && (
-          <div className="flex flex-wrap items-center gap-3 text-xs bg-slate-950/60 p-3 rounded-2xl border border-indigo-900/60">
-            <div className="flex items-center gap-1.5 text-slate-300">
-              <span className="text-slate-400">Endpoint:</span>
-              <span className="font-mono font-bold text-white bg-slate-800 px-2 py-0.5 rounded border border-slate-700">
-                {selectedPartner.endpoint}
-              </span>
-            </div>
-            <div className="flex items-center gap-1.5 text-slate-300">
-              <span className="text-slate-400">API Path:</span>
-              <span className="font-mono text-indigo-300 bg-indigo-950/60 px-2 py-0.5 rounded border border-indigo-800/60">
-                {selectedPartner.apiPath || '/dev/h-api/news'}
-              </span>
-            </div>
-            <div className="flex items-center gap-1.5 text-slate-300">
-              <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-              <span className="text-slate-400">Security Token (s-d):</span>
-              <span className="font-mono text-emerald-400 bg-emerald-950/40 px-2 py-0.5 rounded border border-emerald-800/40" title={selectedPartner.securityToken}>
-                {selectedPartner.securityToken ? `${selectedPartner.securityToken.slice(0, 8)}...${selectedPartner.securityToken.slice(-6)}` : '1Lkya2...33eG'}
-              </span>
-            </div>
-          </div>
-        )}
-
-        {/* Fetched Elements Cards */}
-        <div>
-          <div className="flex items-center justify-between mb-2.5">
-            <span className="text-xs font-bold uppercase tracking-wider text-indigo-300">
-              Discovered Ad Elements {fetchedElements.length > 0 && `(${fetchedElements.length})`}
-            </span>
-            <span className="text-[11px] text-slate-400">
-              Click any element below to automatically configure GPT parameters and target container
-            </span>
-          </div>
-
-          {fetchedElements.length === 0 ? (
-            <div className="p-5 rounded-2xl border border-dashed border-indigo-800/60 bg-indigo-950/20 text-center space-y-2">
-              <p className="text-xs text-indigo-200">
-                No elements fetched yet. Click <span className="font-bold text-white">"Fetch Live Elements"</span> to pull active DFP ad placements directly from <span className="font-mono text-indigo-300">{selectedPartner?.endpoint || 'stagingfederalsite.hocalwire.in'}</span>.
-              </p>
-              <button
-                type="button"
-                onClick={handleFetchElements}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-500/20 hover:bg-indigo-500/30 border border-indigo-400/30 text-indigo-200 text-xs font-semibold"
-              >
-                <RefreshCw className="w-3 h-3" />
-                Fetch Elements Now
-              </button>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-              {fetchedElements.map((el) => {
-                const isSelected = selectedElementId === el.id || (adUnitCode === el.slotCode && width === el.width && height === el.height);
-                return (
-                  <button
-                    key={el.id}
-                    type="button"
-                    onClick={() => handleSelectElement(el)}
-                    className={`p-3.5 rounded-2xl border text-left transition-all relative flex flex-col justify-between ${
-                      isSelected
-                        ? 'bg-blue-600/30 border-blue-400 shadow-lg shadow-blue-500/20 ring-1 ring-blue-400'
-                        : 'bg-slate-800/60 border-slate-700 hover:border-indigo-400 hover:bg-slate-800'
-                    }`}
-                  >
-                    <div>
-                      <div className="flex items-center justify-between gap-1 mb-1.5">
-                        <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
-                          {el.name || 'Ad Slot'}
-                        </span>
-                        <span className="font-mono text-[10px] font-bold text-emerald-400 bg-emerald-950/50 px-1.5 py-0.5 rounded border border-emerald-800/40">
-                          {el.width}x{el.height}
-                        </span>
-                      </div>
-                      <div className="font-mono text-xs font-bold text-white truncate" title={el.slotCode}>
-                        /{el.slotCode}
-                      </div>
-                      <div className="font-mono text-[11px] text-slate-400 truncate mt-1" title={el.divId}>
-                        DIV: {el.divId}
-                      </div>
-                    </div>
-
-                    <div className="mt-3 pt-2 border-t border-slate-700/60 flex items-center justify-between text-[10px]">
-                      <span className={isSelected ? 'text-blue-300 font-bold' : 'text-slate-400'}>
-                        {isSelected ? '✓ Selected for Push' : 'Click to select'}
-                      </span>
-                      {isSelected && (
-                        <span className="w-2 h-2 rounded-full bg-blue-400 animate-pulse"></span>
-                      )}
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          )}
-        </div>
-
-        {/* 1-Click Push Action Row */}
-        <div className="pt-2 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-t border-indigo-800/50">
-          <div className="text-xs text-indigo-200 flex items-center gap-2">
-            <Zap className="w-4 h-4 text-amber-400 shrink-0" />
-            <span>
-              Target: <span className="font-mono font-bold text-white">/{networkCode}/{adUnitCode}</span> ({width}x{height}) → container <span className="font-mono text-indigo-300">{divId}</span>
-            </span>
-          </div>
-
-          <button
-            type="button"
-            onClick={handlePushDfp}
-            disabled={pushingDfp}
-            className="flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-extrabold shadow-lg shadow-emerald-600/30 transition disabled:opacity-50"
-          >
-            {pushingDfp ? (
-              <>
-                <RefreshCw className="w-4 h-4 animate-spin" />
-                <span>Pushing DFP to Partner...</span>
-              </>
-            ) : (
-              <>
-                <Send className="w-4 h-4" />
-                <span>Push DFP Code to {selectedPartner?.name || 'Selected Partner'}</span>
-              </>
-            )}
-          </button>
-        </div>
-      </div>
 
       {/* Tag Architecture Selector */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -762,125 +480,6 @@ export const GptGeneratorPage: React.FC = () => {
         </div>
       </div>
 
-      {/* DFP Code Push Result Modal */}
-      {showPushModal && pushResult && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-2xl w-full border border-slate-200 shadow-2xl overflow-hidden animate-scale-in">
-            {/* Modal Header */}
-            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
-              <div className="flex items-center gap-2.5">
-                <span className={`p-2 rounded-xl ${pushResult.success ? 'bg-emerald-100 text-emerald-600' : 'bg-blue-100 text-blue-600'}`}>
-                  {pushResult.success ? <CheckCircle2 className="w-5 h-5" /> : <Send className="w-5 h-5" />}
-                </span>
-                <div>
-                  <h3 className="text-base font-bold text-slate-900">
-                    {pushResult.success ? 'DFP Code Successfully Pushed!' : 'DFP Code Push Dispatched'}
-                  </h3>
-                  <p className="text-xs text-slate-500">
-                    Synchronized to {pushResult.partnerName} CMS
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={() => setShowPushModal(false)}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* Modal Body */}
-            <div className="p-6 space-y-4 max-h-[75vh] overflow-y-auto">
-              {/* Partner & Endpoint Info Card */}
-              <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200 space-y-2 text-xs">
-                <div className="flex items-center justify-between">
-                  <span className="text-slate-500 font-medium">Partner:</span>
-                  <span className="font-bold text-slate-800">{pushResult.partnerName}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-slate-500 font-medium">Target URL:</span>
-                  <span className="font-mono text-blue-600 font-semibold truncate max-w-[320px]">{pushResult.endpoint}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-slate-500 font-medium">Element Slot:</span>
-                  <span className="font-mono text-slate-800 font-bold">{pushResult.element?.slotCode} ({pushResult.element?.width}x{pushResult.element?.height})</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-slate-500 font-medium">Container DIV ID:</span>
-                  <span className="font-mono text-slate-800">{pushResult.element?.divId}</span>
-                </div>
-                {pushResult.statusCode && (
-                  <div className="flex items-center justify-between">
-                    <span className="text-slate-500 font-medium">HTTP Status:</span>
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold font-mono bg-emerald-100 text-emerald-700">
-                      {pushResult.statusCode} OK
-                    </span>
-                  </div>
-                )}
-              </div>
-
-              {/* Generated & Pushed Snippet */}
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <label className="text-xs font-bold uppercase tracking-wider text-slate-700">
-                    Pushed DFP Code Snippet
-                  </label>
-                  <button
-                    onClick={() => {
-                      navigator.clipboard.writeText(pushResult.generatedSnippet);
-                      setCopiedKey('modal-snippet');
-                      setTimeout(() => setCopiedKey(null), 2500);
-                    }}
-                    className="flex items-center gap-1 text-xs font-bold text-blue-600 hover:text-blue-700"
-                  >
-                    {copiedKey === 'modal-snippet' ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
-                    <span>{copiedKey === 'modal-snippet' ? 'Copied!' : 'Copy Code'}</span>
-                  </button>
-                </div>
-                <pre className="p-3.5 rounded-xl bg-slate-950 text-emerald-400 font-mono text-xs overflow-x-auto border border-slate-800 leading-relaxed max-h-48">
-                  {pushResult.generatedSnippet}
-                </pre>
-              </div>
-
-              {/* API Response Details */}
-              {pushResult.responseData && (
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold uppercase tracking-wider text-slate-700">
-                    Partner CMS Response Acknowledgement
-                  </label>
-                  <pre className="p-3.5 rounded-xl bg-slate-100 text-slate-800 font-mono text-xs overflow-x-auto border border-slate-200 leading-relaxed max-h-36">
-                    {typeof pushResult.responseData === 'object'
-                      ? JSON.stringify(pushResult.responseData, null, 2)
-                      : String(pushResult.responseData)}
-                  </pre>
-                </div>
-              )}
-            </div>
-
-            {/* Modal Footer */}
-            <div className="px-6 py-3.5 border-t border-slate-100 bg-slate-50 flex items-center justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  navigator.clipboard.writeText(pushResult.generatedSnippet);
-                  toastSuccess('Code Copied', 'DFP snippet copied to clipboard');
-                }}
-                className="px-4 py-2 rounded-xl bg-blue-50 text-blue-700 hover:bg-blue-100 text-xs font-bold transition flex items-center gap-1.5"
-              >
-                <Copy className="w-3.5 h-3.5" />
-                Copy DFP Snippet
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowPushModal(false)}
-                className="px-4 py-2 rounded-xl bg-slate-900 text-white hover:bg-slate-800 text-xs font-bold transition"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

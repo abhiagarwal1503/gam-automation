@@ -232,6 +232,18 @@ export function initDatabase() {
   try { db.exec(`ALTER TABLE users ADD COLUMN is_deleted INTEGER DEFAULT 0`); } catch {}
   try { db.exec(`ALTER TABLE campaigns ADD COLUMN created_by TEXT`); } catch {}
   try { db.exec(`ALTER TABLE campaigns ADD COLUMN creator_email TEXT`); } catch {}
+  try { db.exec(`ALTER TABLE campaigns ADD COLUMN custom_name TEXT`); } catch {}
+  try { db.exec(`ALTER TABLE campaigns ADD COLUMN network_code TEXT`); } catch {}
+  try { db.exec(`ALTER TABLE campaigns ADD COLUMN gam_advertiser_id TEXT`); } catch {}
+  try { db.exec(`ALTER TABLE campaigns ADD COLUMN line_item_type TEXT DEFAULT 'SPONSORSHIP'`); } catch {}
+  try { db.exec(`ALTER TABLE campaigns ADD COLUMN creative_type TEXT DEFAULT 'IMAGE'`); } catch {}
+  try { db.exec(`ALTER TABLE campaigns ADD COLUMN assets_map TEXT`); } catch {}
+  try { db.exec(`ALTER TABLE campaigns ADD COLUMN third_party_snippet TEXT`); } catch {}
+  try { db.exec(`ALTER TABLE campaigns ADD COLUMN is_safe_frame_compatible INTEGER DEFAULT 1`); } catch {}
+  try { db.exec(`ALTER TABLE campaigns ADD COLUMN cm360_url TEXT`); } catch {}
+  try { db.exec(`ALTER TABLE campaigns ADD COLUMN custom_code TEXT`); } catch {}
+  try { db.exec(`ALTER TABLE campaigns ADD COLUMN native_fields TEXT`); } catch {}
+  try { db.exec(`ALTER TABLE creatives ADD COLUMN creative_type TEXT DEFAULT 'IMAGE'`); } catch {}
   try { db.exec(`ALTER TABLE ad_units ADD COLUMN network_code TEXT`); } catch {}
   try { db.exec(`ALTER TABLE advertisers ADD COLUMN network_code TEXT`); } catch {}
   try { db.exec(`ALTER TABLE gam_clients ADD COLUMN effective_root_ad_unit_id TEXT`); } catch {}
@@ -386,8 +398,8 @@ export function initDatabase() {
       timeZone: 'America/New_York',
       currencyCode: 'USD',
       apiVersion: process.env.GAM_API_VERSION || 'v202511',
-      defaultLineItemType: 'STANDARD',
-      defaultPriority: 8,
+      defaultLineItemType: 'SPONSORSHIP',
+      defaultPriority: 4,
       defaultCostType: 'CPM',
       defaultDeliveryRate: 'EVENLY',
       namingPrefix: 'newstrack',

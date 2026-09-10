@@ -13,7 +13,8 @@ import {
   creativeRepo,
   associationRepo,
   gptTagRepo,
-  settingsRepo
+  settingsRepo,
+  clientRepo
 } from '../repositories';
 import {
   GoogleAdManagerCompanyService,
@@ -62,6 +63,14 @@ export class CampaignWorkflowService {
       endDate: input.endDate,
       sizes: input.sizes && input.sizes.length > 0 ? input.sizes : [{ width: 300, height: 250 }],
       position: input.position || config.defaults.primaryPosition,
+      lineItemType: input.lineItemType || 'SPONSORSHIP',
+      creativeType: input.creativeType || 'IMAGE',
+      assetsMap: input.assetsMap || undefined,
+      thirdPartySnippet: input.thirdPartySnippet || undefined,
+      isSafeFrameCompatible: input.isSafeFrameCompatible !== false,
+      cm360Url: input.cm360Url || undefined,
+      customCode: input.customCode || undefined,
+      nativeFields: input.nativeFields || undefined,
       status: 'DRAFT',
       currentStep: 'INITIALIZED',
       isDryRun: Boolean(input.isDryRun),
@@ -427,6 +436,18 @@ export class CampaignWorkflowService {
       // -------------------------------------------------------------
       campaignRepo.updateStatus(campaignId, 'CREATING_LINE_ITEM', 'Creating Line Items in Google Ad Manager...');
 
+      // Dynamically resolve currency code for this specific network / client account
+      let effectiveCurrency: string | undefined = undefined;
+      if (networkCode) {
+        const client = clientRepo.findByNetworkCode(networkCode);
+        if (client?.currencyCode) {
+          effectiveCurrency = client.currencyCode;
+        }
+      }
+      if (!effectiveCurrency) {
+        effectiveCurrency = settings.currencyCode || config.gam.defaultCurrencyCode || 'USD';
+      }
+
       const createdLineItems: { lineItem: any; googleId: string; size: AdSize }[] = [];
       const existingLineItems = lineItemRepo.findByCampaignId(campaignId);
 
@@ -437,6 +458,9 @@ export class CampaignWorkflowService {
         let lineItem = existingLineItems.find(li => li.size.width === size.width && li.size.height === size.height);
         let googleLineItemId = lineItem?.googleLineItemId;
 
+        const effectiveLineItemType = ((campaign as any).lineItemType || settings.defaultLineItemType || config.defaults.lineItemType || 'SPONSORSHIP') as any;
+        const effectivePriority = effectiveLineItemType === 'SPONSORSHIP' ? 4 : (effectiveLineItemType === 'STANDARD' ? 8 : (settings.defaultPriority || 4));
+
         if (!lineItem) {
           lineItem = lineItemRepo.create({
             id: `LIN-${Date.now().toString().slice(-6)}-${size.width}x${size.height}`,
@@ -446,15 +470,14 @@ export class CampaignWorkflowService {
             size,
             startDate: campaign.startDate,
             endDate: campaign.endDate,
-            lineItemType: settings.defaultLineItemType || config.defaults.lineItemType || 'SPONSORSHIP',
+            lineItemType: effectiveLineItemType,
             costType: settings.defaultCostType || config.defaults.costType || 'CPM',
-            priority: 4,
+            priority: effectivePriority,
             status: 'ACTIVE',
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString()
           });
         }
-
 
         if (!googleLineItemId) {
           // Check if line item already exists in GAM for this order
@@ -477,10 +500,11 @@ export class CampaignWorkflowService {
               googleAdUnitId: item.googleId,
               startDate: campaign.startDate,
               endDate: campaign.endDate,
-              lineItemType: 'SPONSORSHIP',
-              priority: 4,
+              lineItemType: effectiveLineItemType,
+              priority: effectivePriority,
               costType: lineItem.costType,
               timeZoneId: timeZone,
+              currencyCode: effectiveCurrency,
               networkCode,
               campaignId,
               isDryRun
@@ -496,10 +520,11 @@ export class CampaignWorkflowService {
                 googleAdUnitId: item.googleId,
                 startDate: campaign.startDate,
                 endDate: campaign.endDate,
-                lineItemType: 'SPONSORSHIP',
-                priority: 4,
+                lineItemType: effectiveLineItemType,
+                priority: effectivePriority,
                 costType: lineItem.costType,
                 timeZoneId: timeZone,
+                currencyCode: effectiveCurrency,
                 networkCode,
                 campaignId,
                 isDryRun
@@ -548,16 +573,21 @@ export class CampaignWorkflowService {
         let creative = existingCreatives.find(cr => cr.width === size.width && cr.height === size.height);
         let googleCreativeId = creative?.googleCreativeId;
 
+        // Size-specific asset from assetsMap if present, fallback to campaign.bannerUrl
+        const sizeKey = `${size.width}x${size.height}`;
+        const sizeBannerUrl = (campaign as any).assetsMap?.[sizeKey] || campaign.bannerUrl;
+
         if (!creative) {
           creative = creativeRepo.create({
             id: `CRE-${Date.now().toString().slice(-6)}-${size.width}x${size.height}`,
             campaignId,
             lineItemId: item.lineItem.id,
             name: creativeName,
-            bannerUrl: campaign.bannerUrl,
+            bannerUrl: sizeBannerUrl,
             targetUrl: campaign.targetUrl,
             width: size.width,
             height: size.height,
+            creativeType: (campaign as any).creativeType || 'IMAGE',
             status: 'ACTIVE',
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString()
@@ -581,9 +611,15 @@ export class CampaignWorkflowService {
             let createCreativeRes = await GoogleAdManagerCreativeService.createCreative({
               advertiserId: googleAdvertiserId,
               name: creativeName,
-              bannerUrl: campaign.bannerUrl,
+              bannerUrl: sizeBannerUrl,
               targetUrl: campaign.targetUrl,
               size,
+              creativeType: (campaign as any).creativeType || 'IMAGE',
+              thirdPartySnippet: (campaign as any).thirdPartySnippet,
+              isSafeFrameCompatible: (campaign as any).isSafeFrameCompatible,
+              cm360Url: (campaign as any).cm360Url,
+              customCode: (campaign as any).customCode,
+              nativeFields: (campaign as any).nativeFields,
               networkCode,
               campaignId,
               isDryRun
@@ -595,9 +631,15 @@ export class CampaignWorkflowService {
               createCreativeRes = await GoogleAdManagerCreativeService.createCreative({
                 advertiserId: googleAdvertiserId,
                 name: uniqueCreativeName,
-                bannerUrl: campaign.bannerUrl,
+                bannerUrl: sizeBannerUrl,
                 targetUrl: campaign.targetUrl,
                 size,
+                creativeType: (campaign as any).creativeType || 'IMAGE',
+                thirdPartySnippet: (campaign as any).thirdPartySnippet,
+                isSafeFrameCompatible: (campaign as any).isSafeFrameCompatible,
+                cm360Url: (campaign as any).cm360Url,
+                customCode: (campaign as any).customCode,
+                nativeFields: (campaign as any).nativeFields,
                 networkCode,
                 campaignId,
                 isDryRun
@@ -648,7 +690,7 @@ export class CampaignWorkflowService {
 
         if (!assoc) {
           assoc = associationRepo.create({
-            id: `LICA-${Date.now().toString().slice(-6)}`,
+            id: `LICA-${Date.now().toString().slice(-6)}-${item.size.width}x${item.size.height}-${Math.floor(Math.random() * 1000)}`,
             lineItemId: item.lineItemId,
             creativeId: item.creative.id,
             status: 'ACTIVE',

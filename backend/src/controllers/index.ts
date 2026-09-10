@@ -205,7 +205,27 @@ export const campaignController = {
 
   async create(req: Request, res: Response) {
     try {
-      const { advertiserName, customName, advertiserId, networkCode, bannerUrl, targetUrl, startDate, endDate, sizes, position, isDryRun } = req.body;
+      const {
+        advertiserName,
+        customName,
+        advertiserId,
+        networkCode,
+        bannerUrl,
+        targetUrl,
+        startDate,
+        endDate,
+        sizes,
+        position,
+        isDryRun,
+        lineItemType,
+        creativeType,
+        assetsMap,
+        thirdPartySnippet,
+        isSafeFrameCompatible,
+        cm360Url,
+        customCode,
+        nativeFields
+      } = req.body;
 
       if (!advertiserName || !bannerUrl || !targetUrl || !startDate || !endDate) {
         return res.status(400).json({
@@ -240,7 +260,15 @@ export const campaignController = {
         position: position || 'homepage',
         isDryRun: Boolean(isDryRun),
         createdBy,
-        creatorEmail
+        creatorEmail,
+        lineItemType: lineItemType || 'SPONSORSHIP',
+        creativeType: creativeType || 'IMAGE',
+        assetsMap: assetsMap || undefined,
+        thirdPartySnippet: thirdPartySnippet || undefined,
+        isSafeFrameCompatible: isSafeFrameCompatible !== false,
+        cm360Url: cm360Url || undefined,
+        customCode: customCode || undefined,
+        nativeFields: nativeFields || undefined
       });
 
       return res.status(201).json({

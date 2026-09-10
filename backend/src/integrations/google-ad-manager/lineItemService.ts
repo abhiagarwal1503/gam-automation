@@ -1,5 +1,6 @@
 import { soapClient } from './soapClient';
 import { GoogleAdManagerAuthService } from './authService';
+import { GoogleAdManagerNetworkService } from './networkService';
 import { AdSize, LineItemType, CostType } from '../../types';
 import { config } from '../../config';
 
@@ -16,6 +17,7 @@ export interface CreateLineItemParams {
   costPerUnitMicroAmount?: number;
   unitsBought?: number;
   timeZoneId?: string;
+  currencyCode?: string;
   networkCode?: string;
   campaignId?: string;
   isDryRun?: boolean;
@@ -25,11 +27,39 @@ export class GoogleAdManagerLineItemService {
   /**
    * Parses YYYY-MM-DD string accurately without timezone shifting
    */
-  private static parseDateParts(dateStr: string): { year: number; month: number; day: number } {
+  private static parseDateParts(dateStr: string): {
+    year: number;
+    month: number;
+    day: number;
+    hour?: number;
+    minute?: number;
+  } {
+    let hour: number | undefined;
+    let minute: number | undefined;
+
     if (dateStr.includes('T')) {
-      const d = new Date(dateStr);
-      return { year: d.getFullYear(), month: d.getMonth() + 1, day: d.getDate() };
+      const [dPart, tPart] = dateStr.split('T');
+      if (tPart) {
+        const timeParts = tPart.split(':');
+        if (timeParts.length >= 2) {
+          const h = parseInt(timeParts[0], 10);
+          const m = parseInt(timeParts[1], 10);
+          if (!isNaN(h)) hour = h;
+          if (!isNaN(m)) minute = m;
+        }
+      }
+      const dParts = dPart.split('-');
+      if (dParts.length === 3) {
+        return {
+          year: parseInt(dParts[0], 10),
+          month: parseInt(dParts[1], 10),
+          day: parseInt(dParts[2], 10),
+          hour,
+          minute
+        };
+      }
     }
+
     const parts = dateStr.split('-');
     if (parts.length === 3) {
       return {
@@ -39,20 +69,26 @@ export class GoogleAdManagerLineItemService {
       };
     }
     const d = new Date(dateStr);
-    return { year: d.getFullYear(), month: d.getMonth() + 1, day: d.getDate() };
+    return {
+      year: d.getFullYear(),
+      month: d.getMonth() + 1,
+      day: d.getDate(),
+      hour: isNaN(d.getHours()) ? undefined : d.getHours(),
+      minute: isNaN(d.getMinutes()) ? undefined : d.getMinutes()
+    };
   }
 
   /**
-   * Converts a date string (YYYY-MM-DD or ISO) to GAM SOAP DateTime XML
+   * Converts a date string (YYYY-MM-DD or ISO / YYYY-MM-DDTHH:mm) to GAM SOAP DateTime XML
    */
   private static formatDateToGamXml(
     dateStr: string,
     isEnd: boolean,
     timeZoneId: string
   ): string {
-    const { year, month, day } = this.parseDateParts(dateStr);
-    const hour = isEnd ? 23 : 0;
-    const minute = isEnd ? 59 : 0;
+    const { year, month, day, hour: parsedHour, minute: parsedMinute } = this.parseDateParts(dateStr);
+    const hour = parsedHour !== undefined ? parsedHour : (isEnd ? 23 : 0);
+    const minute = parsedMinute !== undefined ? parsedMinute : (isEnd ? 59 : 0);
     const second = isEnd ? 59 : 0;
 
     return `
@@ -194,7 +230,7 @@ export class GoogleAdManagerLineItemService {
           <ns:lineItemType>${lineItemType}</ns:lineItemType>
           <ns:priority>${priority}</ns:priority>
           <ns:costPerUnit>
-            <ns:currencyCode>${config.gam.defaultCurrencyCode}</ns:currencyCode>
+            <ns:currencyCode>${(params.currencyCode || config.gam.defaultCurrencyCode || 'USD').trim().toUpperCase()}</ns:currencyCode>
             <ns:microAmount>${microAmount}</ns:microAmount>
           </ns:costPerUnit>
           <ns:costType>${costType}</ns:costType>
@@ -230,6 +266,27 @@ export class GoogleAdManagerLineItemService {
     }, token || undefined);
 
     if (!response.success) {
+      const currentAttemptedCurrency = (params.currencyCode || config.gam.defaultCurrencyCode || 'USD').trim().toUpperCase();
+      // Auto-heal currency mismatch: if trigger currency was rejected by GAM, query network's real currency and retry once
+      if (
+        (response.googleError?.includes('INVALID_LINE_ITEM_CURRENCY') || response.error?.includes('INVALID_LINE_ITEM_CURRENCY')) &&
+        params.networkCode
+      ) {
+        try {
+          console.warn(`[LineItemService] Currency '${currentAttemptedCurrency}' was rejected by GAM network ${params.networkCode}. Querying NetworkService for actual network currency...`);
+          const net = await GoogleAdManagerNetworkService.getCurrentNetwork(params.networkCode, params.isDryRun);
+          if (net?.currencyCode && net.currencyCode.toUpperCase() !== currentAttemptedCurrency) {
+            console.log(`[LineItemService] Auto-healing: Retrying createLineItem with GAM network currency '${net.currencyCode}'...`);
+            return await this.createLineItem({
+              ...params,
+              currencyCode: net.currencyCode.toUpperCase()
+            });
+          }
+        } catch (healErr: any) {
+          console.error('[LineItemService] Failed to auto-heal currency mismatch:', healErr.message);
+        }
+      }
+
       return {
         success: false,
         error: response.error || 'Failed to create Line Item in Google Ad Manager.',

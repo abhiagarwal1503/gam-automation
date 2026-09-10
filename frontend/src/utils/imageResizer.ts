@@ -1,14 +1,42 @@
+export interface ImageResizeResult {
+  dataUrl: string;
+  width: number;
+  height: number;
+  blob: Blob;
+  scale: number;
+  drawWidth: number;
+  drawHeight: number;
+  offsetX: number;
+  offsetY: number;
+  originalWidth: number;
+  originalHeight: number;
+  fileSizeKb: number;
+}
+
+export interface ResizeOptions {
+  format?: 'image/jpeg' | 'image/png';
+  quality?: number;
+  fitMode?: 'contain' | 'stretch';
+  backgroundColor?: string; // e.g. '#FFFFFF' or 'transparent'
+}
+
 /**
  * Utility to resize an image (file, data URL, or remote URL) to target dimensions
- * using HTML5 Canvas, preserving aspect ratio with cover or letterbox/fit.
+ * using HTML5 Canvas, strictly preserving aspect ratio with proportional contain/fit (zero-crop).
  */
 export async function resizeImageToAdSize(
   imageSource: string | File,
   targetWidth: number,
   targetHeight: number,
-  format: 'image/jpeg' | 'image/png' = 'image/jpeg',
-  quality: number = 0.92
-): Promise<{ dataUrl: string; width: number; height: number; blob: Blob }> {
+  options: ResizeOptions = {}
+): Promise<ImageResizeResult> {
+  const {
+    format = 'image/jpeg',
+    quality = 0.92,
+    fitMode = 'contain',
+    backgroundColor = '#FFFFFF'
+  } = options;
+
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.crossOrigin = 'anonymous';
@@ -24,33 +52,40 @@ export async function resizeImageToAdSize(
           return;
         }
 
-        // Fill background with clean white
-        ctx.fillStyle = '#FFFFFF';
-        ctx.fillRect(0, 0, targetWidth, targetHeight);
+        // Fill background if specified (and not transparent)
+        if (backgroundColor && backgroundColor !== 'transparent') {
+          ctx.fillStyle = backgroundColor;
+          ctx.fillRect(0, 0, targetWidth, targetHeight);
+        } else if (format === 'image/jpeg') {
+          // JPEG doesn't support transparency, fallback to white
+          ctx.fillStyle = '#FFFFFF';
+          ctx.fillRect(0, 0, targetWidth, targetHeight);
+        } else {
+          ctx.clearRect(0, 0, targetWidth, targetHeight);
+        }
 
-        // High quality image rendering
+        // High quality bicubic image rendering
         ctx.imageSmoothingEnabled = true;
         ctx.imageSmoothingQuality = 'high';
 
-        // Compute aspect ratio crop
-        const srcRatio = img.naturalWidth / img.naturalHeight;
-        const targetRatio = targetWidth / targetHeight;
-
+        let scale = 1;
         let drawWidth = targetWidth;
         let drawHeight = targetHeight;
         let offsetX = 0;
         let offsetY = 0;
 
-        if (srcRatio > targetRatio) {
-          // Source is wider -> match height, center crop width
-          drawHeight = targetHeight;
-          drawWidth = targetHeight * srcRatio;
-          offsetX = (targetWidth - drawWidth) / 2;
-        } else {
-          // Source is taller -> match width, center crop height
+        if (fitMode === 'stretch') {
+          // Stretch to fill canvas completely
           drawWidth = targetWidth;
-          drawHeight = targetWidth / srcRatio;
-          offsetY = (targetHeight - drawHeight) / 2;
+          drawHeight = targetHeight;
+          scale = Math.min(targetWidth / img.naturalWidth, targetHeight / img.naturalHeight);
+        } else {
+          // Mandatory CONTAIN / FIT: zero cropping, preserve complete original image
+          scale = Math.min(targetWidth / img.naturalWidth, targetHeight / img.naturalHeight);
+          drawWidth = Math.round(img.naturalWidth * scale);
+          drawHeight = Math.round(img.naturalHeight * scale);
+          offsetX = Math.round((targetWidth - drawWidth) / 2);
+          offsetY = Math.round((targetHeight - drawHeight) / 2);
         }
 
         ctx.drawImage(img, offsetX, offsetY, drawWidth, drawHeight);
@@ -59,7 +94,21 @@ export async function resizeImageToAdSize(
         canvas.toBlob(
           (blob) => {
             if (blob) {
-              resolve({ dataUrl, width: targetWidth, height: targetHeight, blob });
+              const fileSizeKb = Math.round((blob.size / 1024) * 10) / 10;
+              resolve({
+                dataUrl,
+                width: targetWidth,
+                height: targetHeight,
+                blob,
+                scale,
+                drawWidth,
+                drawHeight,
+                offsetX,
+                offsetY,
+                originalWidth: img.naturalWidth,
+                originalHeight: img.naturalHeight,
+                fileSizeKb
+              });
             } else {
               reject(new Error('Failed to convert canvas to blob'));
             }
@@ -73,7 +122,7 @@ export async function resizeImageToAdSize(
     };
 
     img.onload = handleLoad;
-    img.onerror = (err) => reject(new Error('Failed to load image for resizing'));
+    img.onerror = () => reject(new Error('Failed to load image for resizing'));
 
     if (imageSource instanceof File) {
       const reader = new FileReader();
@@ -87,3 +136,4 @@ export async function resizeImageToAdSize(
     }
   });
 }
+

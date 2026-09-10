@@ -57,6 +57,20 @@ export const api = {
     isDryRun?: boolean;
     createdBy?: string;
     creatorEmail?: string;
+    lineItemType?: string;
+    creativeType?: string;
+    assetsMap?: Record<string, string>;
+    thirdPartySnippet?: string;
+    isSafeFrameCompatible?: boolean;
+    cm360Url?: string;
+    customCode?: string;
+    nativeFields?: {
+      headline?: string;
+      body?: string;
+      callToAction?: string;
+      logoUrl?: string;
+      imageUrl?: string;
+    };
   }): Promise<{ campaignId: string; status: string; data: Campaign }> {
     const res = await axios.post(`${API_BASE}/campaigns`, data);
     return res.data;

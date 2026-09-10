@@ -60,6 +60,14 @@ export interface AdUnit {
   updatedAt: string;
 }
 
+export type CreativeType =
+  | 'IMAGE'
+  | 'HTML5'
+  | 'THIRD_PARTY'
+  | 'INTERNAL_REDIRECT'
+  | 'CUSTOM'
+  | 'NATIVE';
+
 export interface Campaign {
   id: string;
   advertiserId?: string;
@@ -79,6 +87,20 @@ export interface Campaign {
   networkCode?: string;
   gamAdvertiserId?: string;
   customName?: string;
+  lineItemType?: LineItemType;
+  creativeType?: CreativeType;
+  assetsMap?: Record<string, string>;
+  thirdPartySnippet?: string;
+  isSafeFrameCompatible?: boolean;
+  cm360Url?: string;
+  customCode?: string;
+  nativeFields?: {
+    headline?: string;
+    body?: string;
+    callToAction?: string;
+    logoUrl?: string;
+    imageUrl?: string;
+  };
   cmsSyncStatus?: string;
   cmsSyncedAt?: string;
   createdBy?: string;
@@ -124,6 +146,7 @@ export interface Creative {
   targetUrl: string;
   width: number;
   height: number;
+  creativeType?: CreativeType;
   status: string;
   createdAt: string;
   updatedAt: string;
@@ -199,6 +222,20 @@ export interface CreateCampaignInput {
   isDryRun?: boolean;
   createdBy?: string;
   creatorEmail?: string;
+  lineItemType?: LineItemType;
+  creativeType?: CreativeType;
+  assetsMap?: Record<string, string>; // Map of `${width}x${height}` to size-specific contain resized dataUrl / bannerUrl
+  thirdPartySnippet?: string;
+  isSafeFrameCompatible?: boolean;
+  cm360Url?: string;
+  customCode?: string;
+  nativeFields?: {
+    headline?: string;
+    body?: string;
+    callToAction?: string;
+    logoUrl?: string;
+    imageUrl?: string;
+  };
 }
 
 export interface WorkflowStepResult {

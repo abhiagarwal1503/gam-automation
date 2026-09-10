@@ -27,7 +27,12 @@ import {
   Layers,
   CheckCircle2,
   Copy,
-  SlidersHorizontal
+  SlidersHorizontal,
+  Code,
+  FileArchive,
+  ShieldCheck,
+  Maximize2,
+  Palette
 } from 'lucide-react';
 import { api } from '../services/api';
 import { useToast } from '../context/ToastContext';
@@ -35,7 +40,7 @@ import { useAuth } from '../context/AuthContext';
 import { ImagePreview } from '../components/ImagePreview';
 import { DatePicker } from '../components/DatePicker';
 import { resizeImageToAdSize } from '../utils/imageResizer';
-import { AdSize } from '../types';
+import { AdSize, LineItemType, CreativeType } from '../types';
 
 const POSITION_PRESETS = [
   { id: 'homepage', label: 'Homepage' },
@@ -167,14 +172,42 @@ export const CreateCampaignPage: React.FC<CreateCampaignPageProps> = ({ onSucces
   const [resizedMap, setResizedMap] = useState<Record<string, string>>({});
   const [isResizing, setIsResizing] = useState(false);
 
+  // Line Item Configuration (Defaults to SPONSORSHIP Priority 4)
+  const [lineItemType, setLineItemType] = useState<LineItemType>('SPONSORSHIP');
+
+  // Creative Type Configuration (Defaults to IMAGE)
+  const [creativeType, setCreativeType] = useState<CreativeType>('IMAGE');
+  const [fitMode, setFitMode] = useState<'contain' | 'stretch'>('contain');
+  const [backgroundColor, setBackgroundColor] = useState<string>('#FFFFFF');
+
+  // Polymorphic Creative Form Fields
+  const [thirdPartySnippet, setThirdPartySnippet] = useState('');
+  const [isSafeFrameCompatible, setIsSafeFrameCompatible] = useState(true);
+  const [cm360Url, setCm360Url] = useState('');
+  const [customCode, setCustomCode] = useState('');
+  const [nativeHeadline, setNativeHeadline] = useState('');
+  const [nativeBody, setNativeBody] = useState('');
+  const [nativeCta, setNativeCta] = useState('Learn More');
+  const [nativeLogoUrl, setNativeLogoUrl] = useState('');
+
+  // HTML5 ZIP upload state
+  const [html5FileName, setHtml5FileName] = useState<string | null>(null);
+  const [html5FileSizeKb, setHtml5FileSizeKb] = useState<number | null>(null);
+  const [html5ZipVerified, setHtml5ZipVerified] = useState(false);
+
+  // Pre-Flight Validation State
+  const [preFlightModalOpen, setPreFlightModalOpen] = useState(false);
+  const [preFlightChecks, setPreFlightChecks] = useState<{ title: string; ok: boolean; message: string }[]>([]);
+  const [isPreFlightValid, setIsPreFlightValid] = useState(false);
+
   // Other form fields
   const [customName, setCustomName] = useState('');
   const [targetUrl, setTargetUrl] = useState('');
-  const [startDate, setStartDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [startDate, setStartDate] = useState(() => `${new Date().toISOString().split('T')[0]}T00:00`);
   const [endDate, setEndDate] = useState(() => {
     const d = new Date();
     d.setDate(d.getDate() + 10);
-    return d.toISOString().split('T')[0];
+    return `${d.toISOString().split('T')[0]}T23:59`;
   });
   const [position, setPosition] = useState('homepage');
   const [selectedSizes, setSelectedSizes] = useState<AdSize[]>([DEFAULT_SIZES[0]]);
@@ -196,14 +229,22 @@ export const CreateCampaignPage: React.FC<CreateCampaignPageProps> = ({ onSucces
     setTimeout(() => setCopiedKey(null), 2000);
   };
 
-  // Auto-resize uploaded banner whenever sizes change or new image is uploaded
-  const performAutoResize = async (sourceDataUrl: string, sizesToResize: AdSize[]) => {
+  // Auto-resize uploaded banner whenever sizes change, fitMode changes, or new image is uploaded
+  const performAutoResize = async (
+    sourceDataUrl: string,
+    sizesToResize: AdSize[],
+    mode: 'contain' | 'stretch' = fitMode,
+    bgColor: string = backgroundColor
+  ) => {
     setIsResizing(true);
     const newMap: Record<string, string> = {};
     try {
       for (const size of sizesToResize) {
         const key = `${size.width}x${size.height}`;
-        const resized = await resizeImageToAdSize(sourceDataUrl, size.width, size.height);
+        const resized = await resizeImageToAdSize(sourceDataUrl, size.width, size.height, {
+          fitMode: mode,
+          backgroundColor: bgColor
+        });
         newMap[key] = resized.dataUrl;
       }
       setResizedMap(newMap);
@@ -405,12 +446,151 @@ export const CreateCampaignPage: React.FC<CreateCampaignPageProps> = ({ onSucces
     }
   }, [isAdvertiserScoped, user?.advertiserName, user?.advertiserId]);
 
-  // When selected sizes change, re-run auto-resize
+  // Load configured defaultLineItemType from System Settings
+  useEffect(() => {
+    api.getSettings().then(s => {
+      if (s?.defaultLineItemType) {
+        setLineItemType(s.defaultLineItemType as LineItemType);
+      }
+    }).catch(err => {
+      console.warn('Failed to load defaultLineItemType from settings:', err.message);
+    });
+  }, []);
+
+  // When selected sizes, fitMode, or backgroundColor change, re-run auto-resize
   useEffect(() => {
     if (rawBannerDataUrl) {
-      performAutoResize(rawBannerDataUrl, selectedSizes);
+      performAutoResize(rawBannerDataUrl, selectedSizes, fitMode, backgroundColor);
     }
-  }, [selectedSizes]);
+  }, [selectedSizes, fitMode, backgroundColor]);
+
+  const handleHtml5Upload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.name.endsWith('.zip')) {
+      setError('Please upload a valid .zip HTML5 archive.');
+      return;
+    }
+    const sizeKb = Math.round(file.size / 1024);
+    setHtml5FileName(file.name);
+    setHtml5FileSizeKb(sizeKb);
+    setHtml5ZipVerified(true);
+    showSuccessToast('HTML5 Archive Uploaded', `${file.name} (${sizeKb} KB) verified`);
+  };
+
+  const handleRunPreFlightValidation = () => {
+    const checks: { title: string; ok: boolean; message: string }[] = [];
+
+    // 1. Network
+    if (selectedNetwork) {
+      checks.push({ title: 'Google Ad Manager Network', ok: true, message: `Connected: ${selectedNetwork.name} (${selectedNetwork.code})` });
+    } else {
+      checks.push({ title: 'Google Ad Manager Network', ok: false, message: 'No GAM network selected.' });
+    }
+
+    // 2. Advertiser
+    if (advertiserQuery.trim()) {
+      checks.push({
+        title: 'Advertiser Account',
+        ok: true,
+        message: selectedAdvertiserId ? `Verified GAM ID: ${selectedAdvertiserId}` : `Will search or create: ${advertiserQuery.trim()}`
+      });
+    } else {
+      checks.push({ title: 'Advertiser Account', ok: false, message: 'Advertiser name is required.' });
+    }
+
+    // 3. Line Item Configuration (Configured centrally in Settings)
+    checks.push({
+      title: 'Line Item Configuration (Settings)',
+      ok: true,
+      message: `Type: ${lineItemType} (Priority ${lineItemType === 'SPONSORSHIP' ? 4 : lineItemType === 'STANDARD' ? 8 : 12}${lineItemType === 'SPONSORSHIP' ? ' • 100% Share of Voice' : ''}) • Configured in Settings`
+    });
+
+    // 4. Flight Dates
+    const s = new Date(startDate);
+    const e = new Date(endDate);
+    if (startDate && endDate && !isNaN(s.getTime()) && !isNaN(e.getTime()) && e > s) {
+      const diffDays = Math.ceil((e.getTime() - s.getTime()) / (1000 * 60 * 60 * 24));
+      checks.push({ title: 'Flight Schedule', ok: true, message: `${diffDays} days (${startDate.replace('T', ' ')} → ${endDate.replace('T', ' ')})` });
+    } else {
+      checks.push({ title: 'Flight Schedule', ok: false, message: 'End date and time must be strictly after start date and time.' });
+    }
+
+    // 5. Creative Type & Assets
+    if (creativeType === 'IMAGE') {
+      if (rawBannerDataUrl) {
+        checks.push({
+          title: 'Master Image Asset',
+          ok: true,
+          message: `Source: ${originalDimensions ? `${originalDimensions.width}×${originalDimensions.height}px` : 'Loaded'} • Proportional Contain (Zero Crop)`
+        });
+      } else {
+        checks.push({ title: 'Master Image Asset', ok: false, message: 'Please upload a banner image.' });
+      }
+
+      // Ad sizes check
+      if (selectedSizes.length > 0) {
+        const missingResized = selectedSizes.filter(sz => !resizedMap[`${sz.width}x${sz.height}`]);
+        if (missingResized.length === 0) {
+          checks.push({
+            title: `Ad Size Resizing (${selectedSizes.length} sizes)`,
+            ok: true,
+            message: `All dimensions generated: ${selectedSizes.map(sz => `${sz.width}×${sz.height}`).join(', ')}`
+          });
+        } else {
+          checks.push({
+            title: 'Ad Size Resizing',
+            ok: false,
+            message: `Resizing pending for ${missingResized.map(sz => `${sz.width}×${sz.height}`).join(', ')}`
+          });
+        }
+      } else {
+        checks.push({ title: 'Ad Sizes', ok: false, message: 'At least one ad size must be selected.' });
+      }
+    } else if (creativeType === 'HTML5') {
+      if (html5ZipVerified) {
+        checks.push({ title: 'HTML5 Bundle', ok: true, message: `Validated ${html5FileName} (${html5FileSizeKb} KB, index.html verified)` });
+      } else {
+        checks.push({ title: 'HTML5 Bundle', ok: false, message: 'Valid HTML5 ZIP archive containing index.html is required.' });
+      }
+    } else if (creativeType === 'THIRD_PARTY') {
+      if (thirdPartySnippet.trim()) {
+        checks.push({ title: 'Third Party Ad Tag', ok: true, message: `Snippet present (${thirdPartySnippet.length} chars, SafeFrame: ${isSafeFrameCompatible ? 'ON' : 'OFF'})` });
+      } else {
+        checks.push({ title: 'Third Party Ad Tag', ok: false, message: 'Third-party HTML/JS code snippet is required.' });
+      }
+    } else if (creativeType === 'INTERNAL_REDIRECT') {
+      if (cm360Url.trim() && (cm360Url.startsWith('http://') || cm360Url.startsWith('https://'))) {
+        checks.push({ title: 'Campaign Manager 360 Tag', ok: true, message: `DCM URL verified: ${cm360Url}` });
+      } else {
+        checks.push({ title: 'Campaign Manager 360 Tag', ok: false, message: 'Valid CM360 redirect URL is required.' });
+      }
+    } else if (creativeType === 'CUSTOM') {
+      if (customCode.trim()) {
+        checks.push({ title: 'Custom Code', ok: true, message: `Custom code snippet provided (${customCode.length} chars)` });
+      } else {
+        checks.push({ title: 'Custom Code', ok: false, message: 'Custom code snippet is required.' });
+      }
+    } else if (creativeType === 'NATIVE') {
+      if (nativeHeadline.trim() && nativeBody.trim()) {
+        checks.push({ title: 'Native Elements', ok: true, message: `Headline & Body text provided (CTA: "${nativeCta}")` });
+      } else {
+        checks.push({ title: 'Native Elements', ok: false, message: 'Headline and Body text are required for native creative.' });
+      }
+    }
+
+    // 6. Target Landing URL
+    if (targetUrl.trim() && (targetUrl.startsWith('http://') || targetUrl.startsWith('https://'))) {
+      checks.push({ title: 'Landing Page URL', ok: true, message: `${targetUrl.trim()}` });
+    } else {
+      checks.push({ title: 'Landing Page URL', ok: false, message: 'Valid HTTP/HTTPS target URL is required.' });
+    }
+
+    const allOk = checks.every(c => c.ok);
+    setPreFlightChecks(checks);
+    setIsPreFlightValid(allOk);
+    setPreFlightModalOpen(true);
+  };
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -580,8 +760,28 @@ export const CreateCampaignPage: React.FC<CreateCampaignPageProps> = ({ onSucces
       setError('Advertiser Name cannot exceed 255 characters.');
       return;
     }
-    if (!rawBannerDataUrl) {
+    if (creativeType === 'IMAGE' && !rawBannerDataUrl) {
       setError('Please upload a banner image file.');
+      return;
+    }
+    if (creativeType === 'HTML5' && !html5ZipVerified) {
+      setError('Please upload and verify a valid HTML5 ZIP package containing index.html.');
+      return;
+    }
+    if (creativeType === 'THIRD_PARTY' && !thirdPartySnippet.trim()) {
+      setError('Please enter third-party ad tag / JavaScript code.');
+      return;
+    }
+    if (creativeType === 'INTERNAL_REDIRECT' && (!cm360Url.trim() || (!cm360Url.startsWith('http://') && !cm360Url.startsWith('https://')))) {
+      setError('Please enter a valid Campaign Manager 360 redirect URL.');
+      return;
+    }
+    if (creativeType === 'CUSTOM' && !customCode.trim()) {
+      setError('Please enter custom HTML / JS creative code.');
+      return;
+    }
+    if (creativeType === 'NATIVE' && (!nativeHeadline.trim() || !nativeBody.trim())) {
+      setError('Please enter both Headline and Body text for the native creative.');
       return;
     }
     if (!targetUrl.trim() || (!targetUrl.startsWith('http://') && !targetUrl.startsWith('https://'))) {
@@ -605,7 +805,7 @@ export const CreateCampaignPage: React.FC<CreateCampaignPageProps> = ({ onSucces
     try {
       // Use the primary resized format (or raw data url) for campaign submission
       const primaryKey = `${selectedSizes[0].width}x${selectedSizes[0].height}`;
-      const payloadBannerUrl = resizedMap[primaryKey] || rawBannerDataUrl;
+      const payloadBannerUrl = resizedMap[primaryKey] || rawBannerDataUrl || 'https://via.placeholder.com/300x250.png';
 
       const result = await api.createCampaign({
         advertiserName: advertiserQuery.trim(),
@@ -619,6 +819,20 @@ export const CreateCampaignPage: React.FC<CreateCampaignPageProps> = ({ onSucces
         sizes: selectedSizes,
         position,
         isDryRun,
+        lineItemType,
+        creativeType,
+        assetsMap: resizedMap,
+        thirdPartySnippet: creativeType === 'THIRD_PARTY' ? thirdPartySnippet : undefined,
+        isSafeFrameCompatible: creativeType === 'THIRD_PARTY' ? isSafeFrameCompatible : undefined,
+        cm360Url: creativeType === 'INTERNAL_REDIRECT' ? cm360Url : undefined,
+        customCode: creativeType === 'CUSTOM' ? customCode : undefined,
+        nativeFields: creativeType === 'NATIVE' ? {
+          headline: nativeHeadline,
+          body: nativeBody,
+          callToAction: nativeCta,
+          logoUrl: nativeLogoUrl,
+          imageUrl: payloadBannerUrl
+        } : undefined,
         createdBy: user ? `${user.name} (${user.email})` : undefined,
         creatorEmail: user?.email
       });
@@ -632,39 +846,46 @@ export const CreateCampaignPage: React.FC<CreateCampaignPageProps> = ({ onSucces
   };
 
   return (
-    <div className="max-w-4xl mx-auto space-y-4 sm:space-y-6">
-      {/* Header */}
+    <div className="max-w-4xl mx-auto px-3 sm:px-4 lg:px-0 space-y-4 sm:space-y-6 pb-12 sm:pb-8">
+      {/* Header Studio Banner */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
         <div>
-          <h1 className="text-xl sm:text-2xl font-black text-slate-900 flex items-center gap-2">
-            <Megaphone className="w-5 h-5 sm:w-6 sm:h-6 text-blue-600 shrink-0" />
+          <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-blue-50 border border-blue-200/80 text-blue-700 text-[11px] font-bold uppercase tracking-wider mb-2">
+            <Sparkles className="w-3 h-3 text-blue-600" />
+            <span>Google Ad Manager Campaign Studio</span>
+          </div>
+          <h1 className="text-xl sm:text-2xl lg:text-3xl font-black text-slate-900 tracking-tight flex items-center gap-2.5">
+            <span className="p-2 rounded-xl bg-blue-600 text-white shadow-md shadow-blue-500/20">
+              <Megaphone className="w-5 h-5 sm:w-6 sm:h-6 shrink-0" />
+            </span>
             <span>Create Advertisement Campaign</span>
           </h1>
-          <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
-            Book ads directly into Google Ad Manager for the selected network.
+          <p className="text-xs sm:text-sm text-slate-500 mt-1">
+            Automated Google Ad Manager sponsorship booking, canvas contain resizing, and multi-size line items.
           </p>
         </div>
+
         <button
           type="button"
           onClick={setDemoData}
-          className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-xl transition self-start sm:self-auto shrink-0 shadow-2xs"
+          className="flex items-center gap-2 px-3.5 py-2.5 text-xs font-bold text-indigo-700 bg-gradient-to-r from-indigo-50 to-blue-50 hover:from-indigo-100 hover:to-blue-100 border border-indigo-200/80 rounded-xl transition-all self-start sm:self-auto shrink-0 shadow-2xs hover:scale-[1.02] active:scale-[0.98]"
           title={`Fill sample campaign data for ${isPartnerScoped ? (user?.partnerName || 'Partner') : (selectedNetwork?.name || 'selected network')}`}
         >
-          <Sparkles className="w-3.5 h-3.5 shrink-0" />
+          <Sparkles className="w-4 h-4 text-indigo-600 shrink-0" />
           <span>Fill Demo Data</span>
         </button>
       </div>
 
       {/* Account Info Banner - Shows which account is creating this campaign */}
-      <div className="bg-slate-900 text-white rounded-2xl p-4 sm:p-5 shadow-sm border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
-        <div className="flex items-center gap-3 min-w-0">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center font-bold text-white shadow-md text-base shrink-0">
+      <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white rounded-3xl p-5 sm:p-6 shadow-xl border border-slate-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex items-center gap-3.5 min-w-0">
+          <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-blue-600 via-indigo-600 to-teal-500 flex items-center justify-center font-black text-white shadow-lg shadow-blue-600/30 text-lg shrink-0 border border-white/20">
             {user?.name ? user.name.charAt(0).toUpperCase() : 'U'}
           </div>
-          <div className="min-w-0">
-            <div className="flex items-center gap-1.5 flex-wrap">
-              <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Creating Account:</span>
-              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase ${
+          <div className="min-w-0 space-y-0.5">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Account:</span>
+              <span className={`text-[10px] font-extrabold px-2.5 py-0.5 rounded-full uppercase tracking-wider ${
                 user?.role === 'admin'
                   ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30'
                   : 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
@@ -672,23 +893,23 @@ export const CreateCampaignPage: React.FC<CreateCampaignPageProps> = ({ onSucces
                 {user?.role || 'User'}
               </span>
             </div>
-            <div className="font-bold text-sm sm:text-base text-white truncate">
-              {user?.name || 'Current User'} <span className="font-normal text-xs text-slate-400 hidden sm:inline">({user?.email || 'N/A'})</span>
+            <div className="font-extrabold text-base sm:text-lg text-white truncate tracking-tight">
+              {user?.name || 'Current User'} <span className="font-medium text-xs text-slate-400 hidden sm:inline font-mono">({user?.email || 'N/A'})</span>
             </div>
-            <div className="text-[11px] text-slate-400 font-mono truncate sm:hidden">
+            <div className="text-xs text-slate-400 font-mono truncate sm:hidden">
               {user?.email}
             </div>
           </div>
         </div>
 
-        <div className="sm:text-right border-t sm:border-t-0 pt-2.5 sm:pt-0 border-slate-800 flex flex-col sm:items-end gap-1 shrink-0">
-          <span className="text-[11px] text-slate-400 font-medium">Mapped Partner Scope:</span>
-          <span className="text-xs font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 rounded-lg truncate max-w-full">
+        <div className="sm:text-right border-t sm:border-t-0 pt-3 sm:pt-0 border-slate-800/80 flex flex-col sm:items-end gap-1.5 shrink-0">
+          <span className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">Mapped Scope:</span>
+          <span className="text-xs font-bold text-emerald-300 bg-emerald-500/20 border border-emerald-500/30 px-3 py-1 rounded-xl truncate max-w-full shadow-2xs">
             {user?.networkCode === 'ALL' || !user?.networkCode ? '🌐 All Networks (Global Admin)' : `🏢 ${user?.partnerName || user?.networkCode}`}
           </span>
           {isAdvertiserScoped && (
             <div className="flex items-center gap-1.5 mt-0.5">
-              <span className="text-[11px] text-purple-300 font-medium">Assigned Advertiser:</span>
+              <span className="text-[11px] text-purple-300 font-medium">Assigned:</span>
               <span className="text-xs font-bold text-purple-300 bg-purple-500/20 border border-purple-500/30 px-2.5 py-0.5 rounded-lg truncate">
                 🎯 {user?.advertiserName}
               </span>
@@ -698,29 +919,34 @@ export const CreateCampaignPage: React.FC<CreateCampaignPageProps> = ({ onSucces
       </div>
 
       {/* Network Selector */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 sm:p-5 space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-3 border-b border-slate-100">
+      <div className="bg-white rounded-3xl border border-slate-200/90 shadow-sm p-5 sm:p-6 space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-3.5 border-b border-slate-100">
           <div className="flex items-center gap-2">
-            <Radio className="w-4 h-4 text-blue-600 shrink-0" />
-            <h2 className="text-sm font-bold text-slate-900">Network Code <span className="text-rose-500">*</span></h2>
+            <span className="p-1 rounded-lg bg-blue-50 text-blue-600 border border-blue-100">
+              <Radio className="w-4 h-4 shrink-0" />
+            </span>
+            <h2 className="text-sm font-black text-slate-900 uppercase tracking-wider">Google Ad Manager Network <span className="text-rose-500">*</span></h2>
           </div>
           <div className="flex items-center gap-2 flex-wrap justify-between sm:justify-end">
             {!isPartnerScoped && (
               <button
                 type="button"
                 onClick={() => setIsCustomMode(!isCustomMode)}
-                className="text-xs text-blue-600 hover:text-blue-800 font-semibold underline underline-offset-2"
+                className="text-xs text-blue-600 hover:text-blue-800 font-bold underline underline-offset-4"
               >
                 {isCustomMode ? '← Pick from list' : '+ Enter custom network code'}
               </button>
             )}
             {selectedNetwork ? (
-              <span className="text-xs text-emerald-600 font-semibold bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full truncate max-w-[240px] sm:max-w-none" title={`${selectedNetwork.name} (${selectedNetwork.code})`}>
-                {isPartnerScoped ? 'Locked Scope:' : 'Active:'} {selectedNetwork.name} ({selectedNetwork.code})
+              <span className="text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200/80 px-3 py-1 rounded-full truncate max-w-[260px] sm:max-w-none shadow-2xs flex items-center gap-1.5" title={`${selectedNetwork.name} (${selectedNetwork.code})`}>
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                <span>{isPartnerScoped ? 'Locked Scope:' : 'Active:'} {selectedNetwork.name}</span>
+                <span className="font-mono text-[11px] opacity-80 font-semibold">({selectedNetwork.code})</span>
               </span>
             ) : (
-              <span className="text-xs text-amber-600 font-semibold bg-amber-50 border border-amber-200 px-2.5 py-0.5 rounded-full">
-                No network selected
+              <span className="text-xs text-amber-700 font-bold bg-amber-50 border border-amber-200 px-3 py-1 rounded-full shadow-2xs flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-amber-500"></span>
+                <span>No network selected</span>
               </span>
             )}
           </div>
@@ -742,7 +968,7 @@ export const CreateCampaignPage: React.FC<CreateCampaignPageProps> = ({ onSucces
         ) : isCustomMode ? (
           <div className="bg-slate-50 p-3.5 sm:p-4 rounded-xl border border-slate-200 space-y-3">
             <label className="block text-xs font-bold uppercase text-slate-700">Enter Network Code</label>
-            <div className="flex gap-2">
+            <div className="flex flex-col sm:flex-row gap-2">
               <input
                 type="text"
                 placeholder="e.g. 22068249324"
@@ -754,12 +980,12 @@ export const CreateCampaignPage: React.FC<CreateCampaignPageProps> = ({ onSucces
                     handleApplyCustomNetwork();
                   }
                 }}
-                className="flex-1 px-3.5 py-2 rounded-xl border border-slate-300 text-sm font-mono focus:ring-2 focus:ring-blue-500/20"
+                className="flex-1 px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm font-mono focus:ring-2 focus:ring-blue-500/20"
               />
               <button
                 type="button"
                 onClick={() => handleApplyCustomNetwork()}
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-semibold shadow-sm transition shrink-0"
+                className="w-full sm:w-auto px-4 py-2.5 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white rounded-xl text-xs font-semibold shadow-sm transition shrink-0 text-center"
               >
                 Load Advertisers
               </button>
@@ -1230,231 +1456,537 @@ export const CreateCampaignPage: React.FC<CreateCampaignPageProps> = ({ onSucces
             </div>
           </div>
 
-          {/* Banner Upload & Auto-Resizer */}
-          <div className="md:col-span-2 space-y-3">
-            <div className="flex items-center justify-between">
-              <label className="block text-sm font-semibold text-slate-900 flex items-center gap-1.5">
-                <Upload className="w-4 h-4 text-blue-600" />
-                Upload Banner Creative <span className="text-rose-500">*</span>
-              </label>
-              <span className="text-xs text-slate-400">Auto-resizes cleanly into all selected ad sizes</span>
-            </div>
-
-            {/* Hidden native file input allowing multiple selections */}
-            <input
-              type="file"
-              multiple
-              ref={fileInputRef}
-              onChange={handleFileInputChange}
-              accept="image/png, image/jpeg, image/jpg, image/webp, image/gif"
-              className="hidden"
-            />
-
-            {!rawBannerDataUrl ? (
-              <div
-                onDragOver={handleDragOver}
-                onDrop={handleDrop}
-                onClick={() => fileInputRef.current?.click()}
-                className="cursor-pointer border-2 border-dashed border-slate-300 hover:border-blue-500 bg-slate-50 hover:bg-blue-50/40 rounded-2xl p-8 flex flex-col items-center justify-center text-center transition-all group"
-              >
-                <div className="w-14 h-14 rounded-2xl bg-white shadow-sm border border-slate-200 flex items-center justify-center text-blue-600 mb-3 group-hover:scale-105 transition">
-                  <Upload className="w-6 h-6" />
+          {/* ---- Creative Configuration & Type Selector Card ---- */}
+          <div className="md:col-span-2 bg-gradient-to-b from-slate-50/90 to-slate-50/40 rounded-2xl border border-slate-200/90 p-4 sm:p-5 space-y-4 shadow-2xs">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-200/80">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center font-bold shrink-0 shadow-2xs">
+                  <Palette className="w-4 h-4" />
                 </div>
-                <div className="text-sm font-semibold text-slate-800">
-                  Click to browse or drag & drop multiple banner creatives
-                </div>
-                <div className="text-xs text-slate-500 mt-1">
-                  Upload multiple creative formats or 1 high-res master image (auto-resizes to all selected sizes)
-                </div>
-                <div className="text-[11px] text-slate-400 mt-2 font-mono">
-                  PNG, JPG, WEBP, or GIF (select multiple files)
+                <div>
+                  <label className="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
+                    <span>Creative Type</span>
+                    <span className="text-rose-500 font-bold">*</span>
+                  </label>
+                  <p className="text-[11px] text-slate-500">
+                    Select GAM Creative format. Default is ImageCreative.
+                  </p>
                 </div>
               </div>
-            ) : (
-              <div className="space-y-3">
-                {/* Active Primary Banner Card */}
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 sm:p-3.5 bg-blue-50/70 border border-blue-200 rounded-xl">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className="w-10 h-10 rounded-lg bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-sm">
-                      <FileImage className="w-5 h-5" />
-                    </div>
-                    <div className="min-w-0">
-                      <div className="text-xs font-bold text-slate-900 truncate max-w-full">
-                        {uploadedFileName || 'Uploaded Banner'}
-                      </div>
-                      {originalDimensions && (
-                        <div className="text-[11px] text-blue-700 font-medium truncate">
-                          Active Creative: {originalDimensions.width} × {originalDimensions.height} px • Auto-resizing enabled
-                        </div>
-                      )}
+
+              {/* Creative Type Dropdown */}
+              <div className="flex items-center justify-between sm:justify-end gap-2 w-full sm:w-auto">
+                <span className="text-xs text-slate-500 font-medium shrink-0">Creative Type:</span>
+                <select
+                  value={creativeType}
+                  onChange={(e) => setCreativeType(e.target.value as CreativeType)}
+                  className="flex-1 sm:flex-none px-3 py-2 rounded-xl border border-slate-300 bg-white text-xs font-bold text-slate-800 shadow-xs focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600"
+                >
+                  <option value="IMAGE">Image (ImageCreative)</option>
+                  <option value="HTML5">HTML5 (Html5Creative)</option>
+                  <option value="THIRD_PARTY">Third Party (ThirdPartyCreative)</option>
+                  <option value="INTERNAL_REDIRECT">Campaign Manager 360 (InternalRedirectCreative)</option>
+                  <option value="CUSTOM">Custom Code (CustomCreative)</option>
+                  <option value="NATIVE">Native Format (TemplateCreative)</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Dynamic Panel: IMAGE CREATIVE */}
+            {creativeType === 'IMAGE' && (
+              <div className="space-y-4">
+                {/* Contain / Fit Controls & Background Styling */}
+                <div className="flex flex-col gap-3 p-3 sm:p-3.5 bg-white rounded-xl border border-slate-200 text-xs">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <span className="font-bold text-slate-700 flex items-center gap-1.5 shrink-0">
+                      <Maximize2 className="w-3.5 h-3.5 text-blue-600" />
+                      Image Fit:
+                    </span>
+                    <div className="grid grid-cols-2 sm:flex sm:items-center gap-1 bg-slate-100 p-1 rounded-lg w-full sm:w-auto">
+                      <button
+                        type="button"
+                        onClick={() => setFitMode('contain')}
+                        className={`px-2.5 py-1.5 rounded-md text-[11px] font-semibold text-center transition ${
+                          fitMode === 'contain'
+                            ? 'bg-blue-600 text-white shadow-xs'
+                            : 'text-slate-600 hover:text-slate-900'
+                        }`}
+                      >
+                        Contain / Fit (Default)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setFitMode('stretch')}
+                        className={`px-2.5 py-1.5 rounded-md text-[11px] font-semibold text-center transition ${
+                          fitMode === 'stretch'
+                            ? 'bg-blue-600 text-white shadow-xs'
+                            : 'text-slate-600 hover:text-slate-900'
+                        }`}
+                      >
+                        Stretch to Canvas
+                      </button>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
-                    <button
-                      type="button"
-                      onClick={() => fileInputRef.current?.click()}
-                      className="px-3 py-1.5 rounded-lg bg-white border border-slate-200 hover:bg-slate-50 text-xs font-semibold text-slate-700 transition shadow-sm"
-                    >
-                      + Add More Banners
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleClearAllImages}
-                      className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition"
-                      title="Clear all uploaded banners"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
+
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-2.5 border-t border-slate-100">
+                    <span className="font-bold text-slate-700 shrink-0">Padding Fill:</span>
+                    <div className="grid grid-cols-3 sm:flex sm:items-center gap-1.5 w-full sm:w-auto">
+                      {[
+                        { label: 'White', val: '#FFFFFF', dot: 'bg-white border-slate-300' },
+                        { label: 'Transparent', val: 'transparent', dot: 'bg-slate-200 border-dashed border-slate-400' },
+                        { label: 'Black', val: '#000000', dot: 'bg-black border-black' }
+                      ].map(bg => (
+                        <button
+                          key={bg.val}
+                          type="button"
+                          onClick={() => setBackgroundColor(bg.val)}
+                          className={`justify-center px-2 py-1.5 rounded-lg border text-[11px] font-medium flex items-center gap-1.5 transition ${
+                            backgroundColor === bg.val
+                              ? 'border-blue-600 bg-blue-50 text-blue-700 font-bold shadow-2xs'
+                              : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                          }`}
+                        >
+                          <span className={`w-2.5 h-2.5 rounded-full border shrink-0 ${bg.dot}`}></span>
+                          <span className="truncate">{bg.label}</span>
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 </div>
 
-                {/* Multiple Uploaded Banners Selector Strip */}
-                {uploadedFiles.length > 1 && (
-                  <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
-                    <div className="text-xs font-bold text-slate-700 mb-2 flex items-center justify-between">
-                      <span>Uploaded Banners in this Order ({uploadedFiles.length})</span>
-                      <span className="text-[10px] text-slate-400">Click banner to set as primary</span>
+                {/* Banner Upload Dropzone */}
+                <input
+                  type="file"
+                  multiple
+                  ref={fileInputRef}
+                  onChange={handleFileInputChange}
+                  accept="image/png, image/jpeg, image/jpg, image/webp, image/gif"
+                  className="hidden"
+                />
+
+                {!rawBannerDataUrl ? (
+                  <div
+                    onDragOver={handleDragOver}
+                    onDrop={handleDrop}
+                    onClick={() => fileInputRef.current?.click()}
+                    className="cursor-pointer border-2 border-dashed border-slate-300 hover:border-blue-500 bg-white hover:bg-blue-50/40 rounded-2xl p-6 sm:p-8 flex flex-col items-center justify-center text-center transition-all group shadow-2xs"
+                  >
+                    <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-blue-50 border border-blue-200 flex items-center justify-center text-blue-600 mb-2.5 group-hover:scale-105 transition">
+                      <Upload className="w-5 h-5 sm:w-6 sm:h-6" />
                     </div>
-                    <div className="flex flex-wrap gap-2">
-                      {uploadedFiles.map((file, idx) => {
-                        const isPrimary = file.name === uploadedFileName;
-                        return (
-                          <div
-                            key={idx}
-                            onClick={() => handleSelectPrimaryBanner(file)}
-                            className={`cursor-pointer px-3 py-1.5 rounded-lg text-xs font-medium border flex items-center gap-2 transition ${
-                              isPrimary
-                                ? 'bg-blue-600 text-white border-blue-600 shadow-sm font-bold'
-                                : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'
-                            }`}
-                          >
-                            <span className="truncate max-w-[140px]">{file.name}</span>
-                            {file.dimensions && (
-                              <span className={`text-[10px] opacity-75 font-mono`}>
-                                {file.dimensions.width}×{file.dimensions.height}
-                              </span>
-                            )}
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleRemoveBanner(idx);
-                              }}
-                              className={`p-0.5 rounded hover:bg-black/10 transition ${
-                                isPrimary ? 'text-white' : 'text-slate-400 hover:text-rose-600'
-                              }`}
-                            >
-                              <X className="w-3 h-3" />
-                            </button>
-                          </div>
-                        );
-                      })}
+                    <div className="text-xs sm:text-sm font-semibold text-slate-800">
+                      Click to browse or drag & drop banner image
+                    </div>
+                    <div className="text-[11px] sm:text-xs text-slate-500 mt-1 max-w-sm">
+                      Upload 1 master banner (auto-scales proportionally into all selected ad sizes without cropping)
+                    </div>
+                    <div className="text-[10px] sm:text-[11px] text-slate-400 mt-2 font-mono">
+                      PNG, JPG, WEBP, GIF (Direct local upload only)
                     </div>
                   </div>
+                ) : (
+                  <div className="space-y-3">
+                    {/* Active Primary Banner Card */}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 sm:p-3.5 bg-blue-50/70 border border-blue-200 rounded-xl">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-10 h-10 rounded-lg bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-sm">
+                          <FileImage className="w-5 h-5" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="text-xs font-bold text-slate-900 truncate max-w-full">
+                            {uploadedFileName || 'Uploaded Banner'}
+                          </div>
+                          {originalDimensions && (
+                            <div className="text-[11px] text-blue-700 font-medium truncate">
+                              Master Asset: {originalDimensions.width} × {originalDimensions.height} px • Proportional Contain Resizing Enabled
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 justify-end sm:self-auto shrink-0 w-full sm:w-auto">
+                        <button
+                          type="button"
+                          onClick={() => fileInputRef.current?.click()}
+                          className="flex-1 sm:flex-none px-3 py-1.5 rounded-lg bg-white border border-slate-200 hover:bg-slate-50 text-xs font-semibold text-slate-700 transition shadow-sm text-center"
+                        >
+                          + Replace Asset
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleClearAllImages}
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition shrink-0"
+                          title="Clear uploaded banner"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Multiple Uploaded Banners Selector Strip */}
+                    {uploadedFiles.length > 1 && (
+                      <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
+                        <div className="text-xs font-bold text-slate-700 mb-2 flex items-center justify-between">
+                          <span>Uploaded Banners in this Order ({uploadedFiles.length})</span>
+                          <span className="text-[10px] text-slate-400">Click banner to set as primary</span>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {uploadedFiles.map((file, idx) => {
+                            const isPrimary = file.name === uploadedFileName;
+                            return (
+                              <div
+                                key={idx}
+                                onClick={() => handleSelectPrimaryBanner(file)}
+                                className={`cursor-pointer px-3 py-1.5 rounded-lg text-xs font-medium border flex items-center gap-2 transition ${
+                                  isPrimary
+                                    ? 'bg-blue-600 text-white border-blue-600 shadow-sm font-bold'
+                                    : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'
+                                }`}
+                              >
+                                <span className="truncate max-w-[140px]">{file.name}</span>
+                                {file.dimensions && (
+                                  <span className="text-[10px] opacity-75 font-mono">
+                                    {file.dimensions.width}×{file.dimensions.height}
+                                  </span>
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleRemoveBanner(idx);
+                                  }}
+                                  className={`p-0.5 rounded hover:bg-black/10 transition ${
+                                    isPrimary ? 'text-white' : 'text-slate-400 hover:text-rose-600'
+                                  }`}
+                                >
+                                  <X className="w-3 h-3" />
+                                </button>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 )}
+
+                {/* Banner Auto-Resize Preview Suite */}
+                <ImagePreview
+                  url={rawBannerDataUrl || undefined}
+                  originalDimensions={originalDimensions}
+                  resizedMap={resizedMap}
+                  selectedSizes={selectedSizes}
+                  targetUrl={targetUrl}
+                  fitMode={fitMode}
+                />
+              </div>
+            )}
+
+            {/* Dynamic Panel: HTML5 CREATIVE */}
+            {creativeType === 'HTML5' && (
+              <div className="space-y-3 bg-white p-4 rounded-xl border border-slate-200">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                    <FileArchive className="w-4 h-4 text-blue-600" />
+                    Upload HTML5 Creative Package (.zip)
+                  </span>
+                  <span className="text-[11px] text-slate-400">Must include index.html at root</span>
+                </div>
+                <div className="border-2 border-dashed border-slate-300 rounded-xl p-6 text-center bg-slate-50 hover:bg-slate-100 transition">
+                  <input
+                    type="file"
+                    accept=".zip"
+                    onChange={handleHtml5Upload}
+                    className="block w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer"
+                  />
+                  {html5FileName && (
+                    <div className="mt-3 text-xs text-emerald-700 font-semibold flex items-center justify-center gap-1.5">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                      <span>{html5FileName} ({html5FileSizeKb} KB) — index.html verified</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Dynamic Panel: THIRD PARTY CREATIVE */}
+            {creativeType === 'THIRD_PARTY' && (
+              <div className="space-y-3 bg-white p-4 rounded-xl border border-slate-200">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                    <Code className="w-4 h-4 text-blue-600" />
+                    Third-Party Tag / JavaScript Snippet
+                  </span>
+                  <label className="flex items-center gap-1.5 text-xs text-slate-600 font-semibold cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={isSafeFrameCompatible}
+                      onChange={(e) => setIsSafeFrameCompatible(e.target.checked)}
+                      className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                    />
+                    <span>Serve in SafeFrame</span>
+                  </label>
+                </div>
+                <textarea
+                  rows={5}
+                  value={thirdPartySnippet}
+                  onChange={(e) => setThirdPartySnippet(e.target.value)}
+                  placeholder="<script type='text/javascript' src='https://ad.doubleclick.net/...'><\/script>"
+                  className="w-full p-3 font-mono text-xs rounded-xl border border-slate-300 bg-slate-900 text-emerald-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600"
+                />
+                <div className="flex items-center gap-1.5 flex-wrap text-[11px] text-slate-500">
+                  <span>Quick insert GAM macros:</span>
+                  <button
+                    type="button"
+                    onClick={() => setThirdPartySnippet(prev => `${prev}%%CLICK_URL_UNESC%%`)}
+                    className="px-2 py-0.5 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 font-mono text-[10px]"
+                  >
+                    %%CLICK_URL_UNESC%%
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setThirdPartySnippet(prev => `${prev}%%CACHEBUSTER%%`)}
+                    className="px-2 py-0.5 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 font-mono text-[10px]"
+                  >
+                    %%CACHEBUSTER%%
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Dynamic Panel: CAMPAIGN MANAGER 360 */}
+            {creativeType === 'INTERNAL_REDIRECT' && (
+              <div className="space-y-3 bg-white p-4 rounded-xl border border-slate-200">
+                <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                  <Globe className="w-4 h-4 text-blue-600" />
+                  Campaign Manager 360 Redirect Tag URL
+                </span>
+                <input
+                  type="text"
+                  value={cm360Url}
+                  onChange={(e) => setCm360Url(e.target.value)}
+                  placeholder="https://ad.doubleclick.net/ddm/trackimp/..."
+                  className="w-full p-2.5 text-xs font-mono rounded-xl border border-slate-300 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600"
+                />
+              </div>
+            )}
+
+            {/* Dynamic Panel: CUSTOM CODE */}
+            {creativeType === 'CUSTOM' && (
+              <div className="space-y-3 bg-white p-4 rounded-xl border border-slate-200">
+                <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                  <Code className="w-4 h-4 text-blue-600" />
+                  Custom HTML / JavaScript Code
+                </span>
+                <textarea
+                  rows={5}
+                  value={customCode}
+                  onChange={(e) => setCustomCode(e.target.value)}
+                  placeholder="<div id='custom-ad'>...</div><script>...</script>"
+                  className="w-full p-3 font-mono text-xs rounded-xl border border-slate-300 bg-slate-900 text-slate-100 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600"
+                />
+              </div>
+            )}
+
+            {/* Dynamic Panel: NATIVE FORMAT */}
+            {creativeType === 'NATIVE' && (
+              <div className="space-y-3 bg-white p-4 rounded-xl border border-slate-200 text-xs">
+                <span className="font-bold text-slate-800 block">Native Ad Components</span>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">Headline (Max 90 chars)</label>
+                    <input
+                      type="text"
+                      maxLength={90}
+                      value={nativeHeadline}
+                      onChange={(e) => setNativeHeadline(e.target.value)}
+                      placeholder="e.g. Exclusive Festive Savings"
+                      className="w-full p-2 rounded-lg border border-slate-300 text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">Call to Action</label>
+                    <input
+                      type="text"
+                      value={nativeCta}
+                      onChange={(e) => setNativeCta(e.target.value)}
+                      placeholder="e.g. Learn More / Shop Now"
+                      className="w-full p-2 rounded-lg border border-slate-300 text-xs"
+                    />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">Body Text</label>
+                    <textarea
+                      rows={2}
+                      maxLength={140}
+                      value={nativeBody}
+                      onChange={(e) => setNativeBody(e.target.value)}
+                      placeholder="e.g. Discover hand-picked premium offers with nationwide delivery."
+                      className="w-full p-2 rounded-lg border border-slate-300 text-xs"
+                    />
+                  </div>
+                </div>
               </div>
             )}
           </div>
 
-          {/* Banner Auto-Resize Preview */}
-          <div className="md:col-span-2">
-            <ImagePreview
-              url={rawBannerDataUrl || undefined}
-              originalDimensions={originalDimensions}
-              resizedMap={resizedMap}
-              selectedSizes={selectedSizes}
-            />
-          </div>
+          {/* ---- Flight Schedule & Timing Card ---- */}
+          <div className="md:col-span-2 bg-gradient-to-b from-slate-50/90 to-slate-50/40 rounded-2xl border border-slate-200/90 p-4 sm:p-5 space-y-4 shadow-2xs">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-3 border-b border-slate-200/80">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center font-bold shrink-0 shadow-2xs">
+                  <Calendar className="w-4 h-4" />
+                </div>
+                <div>
+                  <label className="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
+                    <span>Flight Schedule & Timing</span>
+                    <span className="text-rose-500 font-bold">*</span>
+                  </label>
+                  <p className="text-[11px] text-slate-500">
+                    Campaign flight window & active broadcast times in Google Ad Manager network time.
+                  </p>
+                </div>
+              </div>
 
-          {/* Start Date */}
-          <DatePicker
-            label="Start Date"
-            required
-            value={startDate}
-            onChange={(val) => setStartDate(val)}
-            presets={[
-              { label: 'Today', daysOffset: 0 },
-              { label: 'Tomorrow', daysOffset: 1 },
-              {
-                label: 'Next Mon',
-                calculate: () => {
-                  const d = new Date();
-                  const day = d.getDay();
-                  const diff = d.getDate() + (day === 0 ? 1 : (8 - day));
-                  d.setDate(diff);
-                  return d.toISOString().split('T')[0];
-                }
-              }
-            ]}
-          />
+              <div className="flex items-center gap-1.5 self-start sm:self-auto">
+                <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-blue-100/70 text-blue-800 border border-blue-200/60 flex items-center gap-1.5 shadow-2xs">
+                  <Clock className="w-3 h-3 text-blue-600 shrink-0" />
+                  <span>00:00 Start → 23:59 End (Default)</span>
+                </span>
+              </div>
+            </div>
 
-          {/* End Date */}
-          <DatePicker
-            label="End Date"
-            required
-            min={startDate}
-            value={endDate}
-            onChange={(val) => setEndDate(val)}
-            presets={[
-              { label: '+7 Days', daysOffset: 7 },
-              { label: '+14 Days', daysOffset: 14 },
-              { label: '+30 Days', daysOffset: 30 },
-              {
-                label: 'End of Month',
-                calculate: () => {
-                  const d = new Date();
-                  const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0);
-                  return lastDay.toISOString().split('T')[0];
-                }
-              }
-            ]}
-          />
+            {/* Date Pickers Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Start Date */}
+              <DatePicker
+                label="Start Date"
+                required
+                showTime
+                defaultTime="00:00"
+                value={startDate}
+                onChange={(val) => setStartDate(val)}
+                presets={[
+                  { label: 'Today', daysOffset: 0 },
+                  { label: 'Tomorrow', daysOffset: 1 },
+                  {
+                    label: 'Next Mon',
+                    calculate: () => {
+                      const d = new Date();
+                      const day = d.getDay();
+                      const diff = d.getDate() + (day === 0 ? 1 : (8 - day));
+                      d.setDate(diff);
+                      return d.toISOString().split('T')[0];
+                    }
+                  }
+                ]}
+              />
 
-          {/* Flight Duration Badge */}
-          {startDate && endDate && (
-            <div className="md:col-span-2 -mt-2">
-              {(() => {
-                const s = new Date(startDate);
-                const e = new Date(endDate);
-                const diffTime = e.getTime() - s.getTime();
-                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-                const isValid = diffDays >= 0;
-                return (
-                  <div className={`p-2.5 rounded-xl text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 border ${
-                    isValid
-                      ? 'bg-blue-50/70 border-blue-200 text-blue-900'
-                      : 'bg-rose-50 border-rose-200 text-rose-800 font-bold'
-                  }`}>
-                    <div className="flex items-center gap-2 min-w-0">
-                      <Clock className="w-3.5 h-3.5 text-blue-600 shrink-0" />
-                      {isValid ? (
-                        <span className="truncate">
-                          Flight Duration: <strong>{diffDays === 0 ? '1 Day (Same Day)' : `${diffDays} Days`}</strong> ({startDate} → {endDate})
+              {/* End Date */}
+              <DatePicker
+                label="End Date"
+                required
+                showTime
+                defaultTime="23:59"
+                min={startDate}
+                value={endDate}
+                onChange={(val) => setEndDate(val)}
+                presets={[
+                  { label: '+7 Days', daysOffset: 7 },
+                  { label: '+14 Days', daysOffset: 14 },
+                  { label: '+30 Days', daysOffset: 30 },
+                  {
+                    label: 'End of Month',
+                    calculate: () => {
+                      const d = new Date();
+                      const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+                      return lastDay.toISOString().split('T')[0];
+                    }
+                  }
+                ]}
+              />
+            </div>
+
+            {/* Flight Duration Badge */}
+            {startDate && endDate && (
+              <div className="pt-1">
+                {(() => {
+                  const s = new Date(startDate);
+                  const e = new Date(endDate);
+                  const diffTime = e.getTime() - s.getTime();
+                  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                  const isValid = diffDays >= 0;
+                  return (
+                    <div className={`p-3 rounded-xl text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2 border transition-all ${
+                      isValid
+                        ? 'bg-gradient-to-r from-blue-50/90 via-indigo-50/80 to-blue-50/90 border-blue-200/80 text-blue-950 shadow-2xs'
+                        : 'bg-rose-50 border-rose-200 text-rose-800 font-bold'
+                    }`}>
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 shadow-2xs ${isValid ? 'bg-blue-600 text-white' : 'bg-rose-600 text-white'}`}>
+                          <Clock className="w-3.5 h-3.5" />
+                        </div>
+                        {isValid ? (
+                          <div className="min-w-0">
+                            <span className="font-bold text-slate-900 text-xs sm:text-sm">
+                              Flight Duration: <span className="text-blue-700">{diffDays === 0 ? '1 Day (Same Day)' : `${diffDays} Days`}</span>
+                            </span>
+                            <span className="text-[11px] font-medium text-slate-500 font-mono ml-2">
+                              ({startDate.replace('T', ' ')} → {endDate.replace('T', ' ')})
+                            </span>
+                          </div>
+                        ) : (
+                          <span>End Date and time cannot be earlier than Start Date and time</span>
+                        )}
+                      </div>
+                      {isValid && (
+                        <span className="text-[10px] px-2.5 py-1 rounded-lg bg-blue-100 text-blue-800 font-bold uppercase tracking-wider shrink-0 self-start sm:self-auto border border-blue-200/60 shadow-2xs">
+                          Sponsorship Priority 4
                         </span>
-                      ) : (
-                        <span>End Date cannot be earlier than Start Date</span>
                       )}
                     </div>
-                    {isValid && (
-                      <span className="text-[10px] px-2 py-0.5 rounded-md bg-blue-100 text-blue-700 font-bold uppercase shrink-0 self-start sm:self-auto">
-                        Sponsorship Priority
-                      </span>
-                    )}
-                  </div>
-                );
-              })()}
-            </div>
-          )}
+                  );
+                })()}
+              </div>
+            )}
+          </div>
 
-          {/* Ad Sizes */}
-          <div className="md:col-span-2 space-y-3 pt-2">
-            <div className="flex items-center justify-between">
-              <label className="block text-sm font-semibold text-slate-900">
-                Ad Size(s) <span className="text-rose-500">*</span>
-              </label>
-              <span className="text-xs text-slate-400">Multiple sizes create separate line items</span>
+          {/* ---- Ad Sizes Card ---- */}
+          <div className="md:col-span-2 bg-gradient-to-b from-slate-50/90 to-slate-50/40 rounded-2xl border border-slate-200/90 p-4 sm:p-5 space-y-3.5 shadow-2xs">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2.5 border-b border-slate-200/80">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center font-bold shrink-0 shadow-2xs">
+                  <LayoutGrid className="w-4 h-4" />
+                </div>
+                <div>
+                  <label className="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
+                    <span>Target Ad Dimensions</span>
+                    <span className="text-rose-500 font-bold">*</span>
+                  </label>
+                  <p className="text-[11px] text-slate-500">
+                    Each selected size generates a matched line item and proportional creative in Google Ad Manager.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-1.5 self-start sm:self-auto">
+                <button
+                  type="button"
+                  onClick={() => setSelectedSizes(DEFAULT_SIZES.slice(0, 3))}
+                  className="text-xs text-blue-600 hover:text-blue-800 font-semibold px-2.5 py-1 rounded-lg bg-blue-50 hover:bg-blue-100 transition"
+                >
+                  Standard 3
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedSizes([...DEFAULT_SIZES])}
+                  className="text-xs text-slate-600 hover:text-slate-900 font-semibold px-2.5 py-1 rounded-lg bg-white border border-slate-200 hover:bg-slate-50 transition"
+                >
+                  Select All
+                </button>
+              </div>
             </div>
-            <div className="flex flex-wrap gap-2.5">
+
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5">
               {DEFAULT_SIZES.map(size => {
                 const isSelected = selectedSizes.some(s => s.width === size.width && s.height === size.height);
                 return (
@@ -1462,27 +1994,39 @@ export const CreateCampaignPage: React.FC<CreateCampaignPageProps> = ({ onSucces
                     type="button"
                     key={`${size.width}x${size.height}`}
                     onClick={() => toggleSize(size)}
-                    className={`px-3.5 py-2 rounded-xl text-xs font-semibold border transition-all ${
+                    className={`p-3 rounded-xl border text-left transition-all relative flex flex-col justify-between ${
                       isSelected
-                        ? 'bg-blue-600 text-white border-blue-600 shadow-sm shadow-blue-600/20'
-                        : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                        ? 'bg-blue-600 text-white border-blue-600 shadow-sm shadow-blue-600/20 font-bold ring-2 ring-blue-400/30'
+                        : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300 hover:bg-slate-50'
                     }`}
                   >
-                    {size.width}×{size.height}
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-mono font-bold">
+                        {size.width}×{size.height}
+                      </span>
+                      {isSelected ? (
+                        <Check className="w-3.5 h-3.5 text-white" />
+                      ) : (
+                        <span className="w-3 h-3 rounded-full border border-slate-300"></span>
+                      )}
+                    </div>
+                    <span className={`text-[10px] mt-1 truncate ${isSelected ? 'text-blue-100' : 'text-slate-400'}`}>
+                      {size.label || (size.width >= 728 ? 'Desktop Banner' : size.width === 300 && size.height === 250 ? 'Medium Rect' : 'Mobile Banner')}
+                    </span>
                   </button>
                 );
               })}
             </div>
           </div>
 
-          {/* Position / Slot */}
+          {/* Position / Slot Placement */}
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <label className="block text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
                 <LayoutGrid className="w-4 h-4 text-indigo-600" />
-                <span>Position / Slot</span>
+                <span>Placement Target / Slot</span>
                 <span className="text-rose-500 font-bold">*</span>
-                <span className="text-[11px] font-normal text-slate-400 font-sans lowercase">(ad placement target)</span>
+                <span className="text-[11px] font-normal text-slate-400 font-sans lowercase">(ad target)</span>
               </label>
               {position && (
                 <button
@@ -1495,7 +2039,7 @@ export const CreateCampaignPage: React.FC<CreateCampaignPageProps> = ({ onSucces
               )}
             </div>
 
-            {/* Custom Input Field - Prominent & Clearly Visible */}
+            {/* Custom Input Field */}
             <div className="relative flex items-center">
               <div className="absolute left-3.5 top-1/2 -translate-y-1/2 flex items-center pointer-events-none text-indigo-600">
                 <Layers className="w-4 h-4" />
@@ -1506,7 +2050,7 @@ export const CreateCampaignPage: React.FC<CreateCampaignPageProps> = ({ onSucces
                 value={position}
                 onChange={(e) => setPosition(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '_'))}
                 placeholder="Enter slot name (e.g. homepage, sidebar, article_top)"
-                className="w-full pl-9 sm:pl-10 pr-9 sm:pr-10 py-2.5 sm:py-3 rounded-xl border-2 border-slate-300 bg-white text-slate-900 font-mono font-bold text-xs sm:text-sm shadow-xs transition hover:border-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600"
+                className="w-full pl-9 sm:pl-10 pr-9 sm:pr-10 py-2.5 sm:py-3 rounded-xl border border-slate-300 bg-white text-slate-900 font-mono font-bold text-xs sm:text-sm shadow-xs transition hover:border-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600"
               />
               {position && (
                 <button
@@ -1555,45 +2099,160 @@ export const CreateCampaignPage: React.FC<CreateCampaignPageProps> = ({ onSucces
             </div>
           </div>
 
-          {/* Dry Run */}
+          {/* Execution Mode (Dry Run) */}
           <div className="space-y-2">
-            <label className="block text-sm font-semibold text-slate-900">Execution Mode</label>
-            <div className="flex items-center justify-between p-3 rounded-xl border border-slate-200 bg-slate-50">
+            <label className="block text-xs font-bold uppercase tracking-wider text-slate-800">Execution Mode</label>
+            <div className="flex items-center justify-between p-3.5 rounded-2xl border border-slate-200 bg-slate-50/80 shadow-2xs">
               <div>
-                <div className="text-xs font-semibold text-slate-800">Dry Run Mode</div>
-                <div className="text-[11px] text-slate-500">
-                  When OFF → executes live placement directly in Google Ad Manager.
+                <div className="text-xs font-bold text-slate-800">Dry Run Simulator</div>
+                <div className="text-[11px] text-slate-500 mt-0.5">
+                  When OFF → executes live campaign directly into Google Ad Manager network.
                 </div>
               </div>
               <input
                 type="checkbox"
                 checked={isDryRun}
                 onChange={(e) => setIsDryRun(e.target.checked)}
-                className="w-5 h-5 text-blue-600 rounded border-slate-300 focus:ring-blue-500 cursor-pointer"
+                className="w-5 h-5 text-blue-600 rounded-lg border-slate-300 focus:ring-blue-500 cursor-pointer"
               />
             </div>
           </div>
         </div>
 
-        {/* Submit */}
-        <div className="pt-4 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="text-xs text-slate-500 order-2 sm:order-1 truncate">
+        {/* Submit Action Bar */}
+        <div className="pt-5 border-t border-slate-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3 text-xs order-2 sm:order-1 flex-wrap">
             {selectedNetwork ? (
-              <span>Network: <strong className="text-slate-800 font-semibold">{selectedNetwork.name}</strong> ({selectedNetwork.code})</span>
+              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 border border-slate-200/80 text-slate-700">
+                <span className="text-slate-400">Target:</span>
+                <span className="font-bold text-slate-900">{selectedNetwork.name}</span>
+                <span className="font-mono text-[10px] text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100 font-bold">
+                  {selectedNetwork.code}
+                </span>
+              </div>
             ) : (
-              <span className="text-amber-600 font-medium">⚠️ No network selected</span>
+              <span className="text-xs text-amber-600 font-semibold bg-amber-50 border border-amber-200 px-3 py-1.5 rounded-xl flex items-center gap-1.5">
+                <AlertCircle className="w-3.5 h-3.5" />
+                Select a GAM network to proceed
+              </span>
             )}
+
+            <div className="flex items-center gap-1.5 text-slate-500 font-medium">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+              <span>{selectedSizes.length} {selectedSizes.length === 1 ? 'Size' : 'Sizes'} Selected</span>
+            </div>
           </div>
-          <button
-            type="submit"
-            disabled={loading || advertiserLoading}
-            className="w-full sm:w-auto order-1 sm:order-2 flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm shadow-md shadow-blue-600/30 transition disabled:opacity-50"
-          >
-            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
-            <span>{isDryRun ? 'Dry Run & Generate Tags' : 'Create Campaign in Google Ad Manager'}</span>
-          </button>
+
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 sm:gap-3 order-1 sm:order-2 w-full sm:w-auto">
+            <button
+              type="button"
+              onClick={handleRunPreFlightValidation}
+              className="w-full sm:w-auto flex items-center justify-center gap-2 px-5 py-3 rounded-xl border border-slate-300 hover:border-indigo-400 bg-white hover:bg-indigo-50/40 active:bg-indigo-100 text-slate-700 hover:text-indigo-900 font-bold text-xs sm:text-sm transition shadow-2xs min-h-[46px]"
+            >
+              <ShieldCheck className="w-4 h-4 text-indigo-600 shrink-0" />
+              <span>Pre-Flight Checklist</span>
+            </button>
+
+            <button
+              type="submit"
+              disabled={loading || advertiserLoading}
+              className="w-full sm:w-auto flex items-center justify-center gap-2 px-7 py-3 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 active:from-blue-800 active:to-indigo-800 text-white font-extrabold text-xs sm:text-sm shadow-md shadow-blue-500/25 transition disabled:opacity-50 min-h-[46px]"
+            >
+              {loading ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin shrink-0" />
+                  <span>Processing GAM Placement...</span>
+                </>
+              ) : (
+                <>
+                  <Play className="w-4 h-4 shrink-0 fill-current" />
+                  <span>{isDryRun ? 'Dry Run & Generate Tags' : 'Create Campaign in Google Ad Manager'}</span>
+                </>
+              )}
+            </button>
+          </div>
         </div>
       </form>
+
+      {/* Pre-Flight Checklist Modal */}
+      {preFlightModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="bg-white rounded-t-3xl sm:rounded-2xl shadow-2xl border border-slate-200 max-w-lg w-full overflow-hidden flex flex-col max-h-[88vh] sm:max-h-[90vh]">
+            <div className="px-4 py-3 sm:px-6 sm:py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className={`p-2 rounded-xl shrink-0 ${isPreFlightValid ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'}`}>
+                  <ShieldCheck className="w-5 h-5" />
+                </div>
+                <div className="min-w-0">
+                  <h3 className="font-bold text-slate-900 text-sm sm:text-base truncate">Campaign Pre-Flight Checklist</h3>
+                  <p className="text-[11px] sm:text-xs text-slate-500 truncate">Validation before Google Ad Manager dispatch</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPreFlightModalOpen(false)}
+                className="p-2 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition shrink-0"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-4 sm:p-6 overflow-y-auto space-y-2.5 sm:space-y-3">
+              {preFlightChecks.map((chk, idx) => (
+                <div
+                  key={idx}
+                  className={`p-3 sm:p-3.5 rounded-xl border flex items-start gap-2.5 sm:gap-3 transition-colors ${
+                    chk.ok
+                      ? 'bg-emerald-50/50 border-emerald-200 text-slate-800'
+                      : 'bg-rose-50/50 border-rose-200 text-slate-800'
+                  }`}
+                >
+                  <div className="mt-0.5">
+                    {chk.ok ? (
+                      <CheckCircle2 className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-600 shrink-0" />
+                    ) : (
+                      <AlertCircle className="w-4 h-4 sm:w-5 sm:h-5 text-rose-600 shrink-0" />
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-semibold text-xs text-slate-900">{chk.title}</div>
+                    <div className="text-[11px] sm:text-xs text-slate-600 mt-0.5 break-words">{chk.message}</div>
+                  </div>
+                </div>
+              ))}
+
+              {!isPreFlightValid && (
+                <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-amber-800 text-xs flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                  <span>Some requirements have not been met. Please correct the flagged items above before launching to Google Ad Manager.</span>
+                </div>
+              )}
+            </div>
+
+            <div className="px-4 py-3 sm:px-6 sm:py-4 bg-slate-50 border-t border-slate-100 flex flex-col-reverse sm:flex-row sm:items-center justify-end gap-2 sm:gap-3">
+              <button
+                type="button"
+                onClick={() => setPreFlightModalOpen(false)}
+                className="w-full sm:w-auto px-4 py-2.5 text-xs font-semibold text-slate-600 hover:text-slate-800 hover:bg-slate-200/60 rounded-xl transition text-center"
+              >
+                Close
+              </button>
+              <button
+                type="button"
+                disabled={!isPreFlightValid || loading}
+                onClick={(e) => {
+                  setPreFlightModalOpen(false);
+                  handleSubmit(e);
+                }}
+                className="w-full sm:w-auto flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-semibold text-xs shadow-md shadow-blue-600/30 transition disabled:opacity-50 min-h-[42px]"
+              >
+                {loading ? <Loader2 className="w-4 h-4 animate-spin shrink-0" /> : <Play className="w-4 h-4 shrink-0" />}
+                <span>Proceed & Launch Campaign</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -467,8 +467,11 @@ export const campaignRepo = {
         id, advertiser_id, advertiser_name, banner_url, target_url,
         start_date, end_date, sizes, position, status, current_step,
         error_message, google_error_details, suggested_action, is_dry_run,
-        network_code, gam_advertiser_id, custom_name, created_by, creator_email, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        network_code, gam_advertiser_id, custom_name, created_by, creator_email,
+        line_item_type, creative_type, assets_map, third_party_snippet,
+        is_safe_frame_compatible, cm360_url, custom_code, native_fields,
+        created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       campaign.id,
       campaign.advertiserId || null,
@@ -490,6 +493,14 @@ export const campaignRepo = {
       (campaign as any).customName || null,
       (campaign as any).createdBy || null,
       (campaign as any).creatorEmail || null,
+      (campaign as any).lineItemType || 'SPONSORSHIP',
+      (campaign as any).creativeType || 'IMAGE',
+      (campaign as any).assetsMap ? JSON.stringify((campaign as any).assetsMap) : null,
+      (campaign as any).thirdPartySnippet || null,
+      (campaign as any).isSafeFrameCompatible !== false ? 1 : 0,
+      (campaign as any).cm360Url || null,
+      (campaign as any).customCode || null,
+      (campaign as any).nativeFields ? JSON.stringify((campaign as any).nativeFields) : null,
       campaign.createdAt,
       campaign.updatedAt
     );
@@ -518,6 +529,14 @@ export const campaignRepo = {
       networkCode: row.network_code || null,
       gamAdvertiserId: row.gam_advertiser_id || null,
       customName: row.custom_name || null,
+      lineItemType: row.line_item_type || 'SPONSORSHIP',
+      creativeType: row.creative_type || 'IMAGE',
+      assetsMap: row.assets_map ? JSON.parse(row.assets_map) : undefined,
+      thirdPartySnippet: row.third_party_snippet || undefined,
+      isSafeFrameCompatible: row.is_safe_frame_compatible !== 0,
+      cm360Url: row.cm360_url || undefined,
+      customCode: row.custom_code || undefined,
+      nativeFields: row.native_fields ? JSON.parse(row.native_fields) : undefined,
       cmsSyncStatus: row.cms_sync_status || null,
       cmsSyncedAt: row.cms_synced_at || null,
       createdBy: row.created_by || null,
@@ -595,6 +614,14 @@ export const campaignRepo = {
       isDryRun: Boolean(row.is_dry_run),
       networkCode: row.network_code || null,
       customName: row.custom_name || null,
+      lineItemType: row.line_item_type || 'SPONSORSHIP',
+      creativeType: row.creative_type || 'IMAGE',
+      assetsMap: row.assets_map ? JSON.parse(row.assets_map) : undefined,
+      thirdPartySnippet: row.third_party_snippet || undefined,
+      isSafeFrameCompatible: row.is_safe_frame_compatible !== 0,
+      cm360Url: row.cm360_url || undefined,
+      customCode: row.custom_code || undefined,
+      nativeFields: row.native_fields ? JSON.parse(row.native_fields) : undefined,
       cmsSyncStatus: row.cms_sync_status || null,
       cmsSyncedAt: row.cms_synced_at || null,
       createdBy: row.created_by || null,

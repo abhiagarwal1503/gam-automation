@@ -9,6 +9,12 @@ export interface CreateCreativeParams {
   bannerUrl: string;
   targetUrl: string;
   size: AdSize;
+  creativeType?: 'IMAGE' | 'HTML5' | 'THIRD_PARTY' | 'INTERNAL_REDIRECT' | 'CUSTOM' | 'NATIVE';
+  thirdPartySnippet?: string;
+  isSafeFrameCompatible?: boolean;
+  cm360Url?: string;
+  customCode?: string;
+  nativeFields?: any;
   networkCode?: string;
   campaignId?: string;
   isDryRun?: boolean;
@@ -16,36 +22,89 @@ export interface CreateCreativeParams {
 
 export class GoogleAdManagerCreativeService {
   /**
-   * Creates a new ImageCreative in Google Ad Manager
+   * Creates a new Creative (ImageCreative, ThirdPartyCreative, InternalRedirectCreative, etc.) in Google Ad Manager
    */
   public static async createCreative(
     params: CreateCreativeParams
   ): Promise<{ success: boolean; id?: string; error?: string; googleError?: string; suggestedAction?: string }> {
     const token = await GoogleAdManagerAuthService.getAccessToken();
-    const cleanTargetUrl = params.targetUrl.replace(/&/g, '&amp;');
+    const cleanTargetUrl = (params.targetUrl || '').replace(/&/g, '&amp;');
     const cleanAdvertiserId = String(params.advertiserId || '').replace(/^ADV-/, '').trim();
+    const type = params.creativeType || 'IMAGE';
 
-    // Fetch image asset as base64 bytes for reliable GAM asset upload
-    let assetXml = '';
-    if (params.bannerUrl.startsWith('data:image/')) {
-      const base64Data = params.bannerUrl.split(',')[1];
-      assetXml = `<ns:assetByteArray>${base64Data}</ns:assetByteArray>`;
+    let creativeNodeXml = '';
+
+    if (type === 'THIRD_PARTY') {
+      const cleanSnippet = (params.thirdPartySnippet || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+      creativeNodeXml = `
+        <ns:creatives xsi:type="ns:ThirdPartyCreative">
+          <ns:advertiserId>${cleanAdvertiserId}</ns:advertiserId>
+          <ns:name>${params.name}</ns:name>
+          <ns:size>
+            <ns:width>${params.size.width}</ns:width>
+            <ns:height>${params.size.height}</ns:height>
+            <ns:isAspectRatio>false</ns:isAspectRatio>
+          </ns:size>
+          <ns:snippet>${cleanSnippet}</ns:snippet>
+          <ns:isSafeFrameCompatible>${params.isSafeFrameCompatible !== false}</ns:isSafeFrameCompatible>
+        </ns:creatives>
+      `;
+    } else if (type === 'INTERNAL_REDIRECT') {
+      const redirectUrl = (params.cm360Url || params.targetUrl || '').replace(/&/g, '&amp;');
+      creativeNodeXml = `
+        <ns:creatives xsi:type="ns:InternalRedirectCreative">
+          <ns:advertiserId>${cleanAdvertiserId}</ns:advertiserId>
+          <ns:name>${params.name}</ns:name>
+          <ns:size>
+            <ns:width>${params.size.width}</ns:width>
+            <ns:height>${params.size.height}</ns:height>
+            <ns:isAspectRatio>false</ns:isAspectRatio>
+          </ns:size>
+          <ns:internalRedirectUrl>${redirectUrl}</ns:internalRedirectUrl>
+        </ns:creatives>
+      `;
+    } else if (type === 'CUSTOM') {
+      const cleanCode = (params.customCode || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+      creativeNodeXml = `
+        <ns:creatives xsi:type="ns:CustomCreative">
+          <ns:advertiserId>${cleanAdvertiserId}</ns:advertiserId>
+          <ns:name>${params.name}</ns:name>
+          <ns:size>
+            <ns:width>${params.size.width}</ns:width>
+            <ns:height>${params.size.height}</ns:height>
+            <ns:isAspectRatio>false</ns:isAspectRatio>
+          </ns:size>
+          <ns:destinationUrl>${cleanTargetUrl}</ns:destinationUrl>
+          <ns:htmlSnippet>${cleanCode}</ns:htmlSnippet>
+        </ns:creatives>
+      `;
     } else {
-      const cleanBannerUrl = params.bannerUrl.replace(/&/g, '&amp;');
-      assetXml = `<ns:assetUrl>${cleanBannerUrl}</ns:assetUrl>`;
-      try {
-        const imgRes = await axios.get(params.bannerUrl, { responseType: 'arraybuffer', timeout: 10000 });
-        if (imgRes.status === 200 && imgRes.data) {
-          const base64Data = Buffer.from(imgRes.data).toString('base64');
-          assetXml = `<ns:assetByteArray>${base64Data}</ns:assetByteArray>`;
+      // Default: ImageCreative
+      let assetXml = '';
+      if (params.bannerUrl && params.bannerUrl.startsWith('data:image/')) {
+        const base64Data = params.bannerUrl.split(',')[1];
+        assetXml = `<ns:assetByteArray>${base64Data}</ns:assetByteArray>`;
+      } else if (params.bannerUrl) {
+        const cleanBannerUrl = params.bannerUrl.replace(/&/g, '&amp;');
+        assetXml = `<ns:assetUrl>${cleanBannerUrl}</ns:assetUrl>`;
+        try {
+          const imgRes = await axios.get(params.bannerUrl, { responseType: 'arraybuffer', timeout: 10000 });
+          if (imgRes.status === 200 && imgRes.data) {
+            const base64Data = Buffer.from(imgRes.data).toString('base64');
+            assetXml = `<ns:assetByteArray>${base64Data}</ns:assetByteArray>`;
+          }
+        } catch {
+          // Fallback to assetUrl if fetch fails
         }
-      } catch {
-        // Fallback to assetUrl if fetch fails
       }
-    }
 
-    const bodyXml = `
-      <ns:createCreatives>
+      creativeNodeXml = `
         <ns:creatives xsi:type="ns:ImageCreative">
           <ns:advertiserId>${cleanAdvertiserId}</ns:advertiserId>
           <ns:name>${params.name}</ns:name>
@@ -65,6 +124,12 @@ export class GoogleAdManagerCreativeService {
             </ns:size>
           </ns:primaryImageAsset>
         </ns:creatives>
+      `;
+    }
+
+    const bodyXml = `
+      <ns:createCreatives>
+        ${creativeNodeXml}
       </ns:createCreatives>
     `;
 

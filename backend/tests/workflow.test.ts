@@ -105,4 +105,59 @@ describe('Campaign Workflow Saga & Idempotency', () => {
     expect(secondLineItems.length).toBe(initialLineItems.length);
     expect(secondLineItems[0].googleLineItemId).toBe(initialLineItems[0].googleLineItemId);
   });
+
+  test('executes multi-size batch campaign with Sponsorship Priority 4 and size-specific assetsMap', async () => {
+    const campaignId = `CMP-MULTI-${Date.now()}`;
+    testCampaignIds.push(campaignId);
+    const now = new Date().toISOString();
+
+    const campaign = campaignRepo.create({
+      id: campaignId,
+      advertiserName: 'MultiSize Sponsor Co',
+      bannerUrl: 'https://example.com/master-1200x628.jpg',
+      targetUrl: 'https://example.com/multi-promo',
+      startDate: '2026-09-01',
+      endDate: '2026-09-30',
+      sizes: [
+        { width: 300, height: 250 },
+        { width: 728, height: 90 },
+        { width: 320, height: 50 }
+      ],
+      lineItemType: 'SPONSORSHIP',
+      creativeType: 'IMAGE',
+      assetsMap: {
+        '300x250': 'data:image/jpeg;base64,mock300x250data',
+        '728x90': 'data:image/jpeg;base64,mock728x90data',
+        '320x50': 'data:image/jpeg;base64,mock320x50data'
+      },
+      position: 'homepage',
+      status: 'DRAFT',
+      currentStep: 'INITIALIZED',
+      isDryRun: true,
+      createdAt: now,
+      updatedAt: now
+    });
+
+    const result = await CampaignWorkflowService.executeWorkflow(campaign.id);
+    if (!result.success) {
+      console.error('MultiSize test failed:', result.error, result.googleError);
+    }
+    expect(result.success).toBe(true);
+
+    const lineItems = lineItemRepo.findByCampaignId(campaign.id);
+    expect(lineItems.length).toBe(3);
+    for (const li of lineItems) {
+      expect(li.lineItemType).toBe('SPONSORSHIP');
+      expect(li.priority).toBe(4);
+      expect(li.googleLineItemId).toBeDefined();
+    }
+
+    const creatives = creativeRepo.findByCampaignId(campaign.id);
+    expect(creatives.length).toBe(3);
+    for (const cr of creatives) {
+      expect(cr.googleCreativeId).toBeDefined();
+      const expectedKey = `${cr.width}x${cr.height}`;
+      expect(cr.bannerUrl).toContain(`mock${expectedKey}data`);
+    }
+  });
 });

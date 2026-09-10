@@ -1304,21 +1304,38 @@ export const SettingsPage: React.FC = () => {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">Default Line Item Type</label>
+              <div className="flex items-center justify-between">
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">Default Line Item Type</label>
+                <span className="text-[10px] text-blue-600 font-semibold bg-blue-50 px-2 py-0.5 rounded-md border border-blue-100">
+                  Global Campaign Default
+                </span>
+              </div>
               <div className="relative">
                 <select
                   value={settings.defaultLineItemType}
-                  onChange={(e) => setSettings({ ...settings, defaultLineItemType: e.target.value })}
+                  onChange={(e) => {
+                    const newType = e.target.value;
+                    let autoPriority = settings.defaultPriority;
+                    if (newType === 'SPONSORSHIP') autoPriority = 4;
+                    else if (newType === 'STANDARD') autoPriority = 8;
+                    else if (['NETWORK', 'BULK', 'PRICE_PRIORITY'].includes(newType)) autoPriority = 12;
+                    else if (newType === 'HOUSE') autoPriority = 16;
+                    setSettings({ ...settings, defaultLineItemType: newType, defaultPriority: autoPriority });
+                  }}
                   className="w-full px-3.5 py-2.5 pr-10 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-800 shadow-2xs appearance-none transition hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 cursor-pointer"
                 >
-                  <option value="STANDARD">STANDARD (Guaranteed impressions)</option>
-                  <option value="SPONSORSHIP">SPONSORSHIP (100% SOV)</option>
-                  <option value="PRICE_PRIORITY">PRICE_PRIORITY (Remnant)</option>
-                  <option value="NETWORK">NETWORK</option>
-                  <option value="HOUSE">HOUSE</option>
+                  <option value="SPONSORSHIP">SPONSORSHIP (Priority 4 - 100% Share of Voice)</option>
+                  <option value="STANDARD">STANDARD (Priority 8 - Impression Goal Guaranteed)</option>
+                  <option value="PRICE_PRIORITY">PRICE_PRIORITY (Priority 12 - Dynamic Net CPM Remnant)</option>
+                  <option value="NETWORK">NETWORK (Priority 12 - % Remnant Delivery)</option>
+                  <option value="BULK">BULK (Priority 12 - Remnant Impression Target)</option>
+                  <option value="HOUSE">HOUSE (Priority 16 - Lowest Priority Fallback)</option>
                 </select>
                 <ChevronDown className="w-4 h-4 text-slate-400 pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2" />
               </div>
+              <p className="text-[11px] text-slate-400">
+                Applied automatically to all campaigns created in Google Ad Manager. (Centrally managed here in Settings).
+              </p>
             </div>
 
             <div className="space-y-1.5">
