@@ -139,7 +139,11 @@ export const BulkBannerChangeModal: React.FC<BulkBannerChangeModalProps> = ({
           const slot = updatedMap[key];
           if (slot) {
             try {
-              const resized = await resizeImageToAdSize(master.dataUrl, slot.width, slot.height);
+              const resized = await resizeImageToAdSize(master.dataUrl, slot.width, slot.height, {
+                backgroundFill: true,
+                backgroundColor: '#000000',
+                fitMode: 'contain'
+              });
               updatedMap[key] = {
                 ...slot,
                 replacementDataUrl: resized.dataUrl,
@@ -178,7 +182,11 @@ export const BulkBannerChangeModal: React.FC<BulkBannerChangeModalProps> = ({
 
       // If dimensions don't match the slot, auto-resize to fit slot bounds
       if (parsed.width !== slot.width || parsed.height !== slot.height) {
-        const resized = await resizeImageToAdSize(parsed.dataUrl, slot.width, slot.height);
+        const resized = await resizeImageToAdSize(parsed.dataUrl, slot.width, slot.height, {
+          backgroundFill: true,
+          backgroundColor: '#000000',
+          fitMode: 'contain'
+        });
         finalDataUrl = resized.dataUrl;
         isResized = true;
       }

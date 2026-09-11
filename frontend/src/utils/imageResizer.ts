@@ -17,12 +17,15 @@ export interface ResizeOptions {
   format?: 'image/jpeg' | 'image/png';
   quality?: number;
   fitMode?: 'contain' | 'stretch';
-  backgroundColor?: string; // e.g. '#FFFFFF' or 'transparent'
+  backgroundFill?: boolean; // Whether background fill is enabled (default true)
+  backgroundColor?: string; // e.g. '#000000', '#FFFFFF', or 'transparent'
+  rotation?: number; // 0, 90, 180, 270
 }
 
 /**
  * Utility to resize an image (file, data URL, or remote URL) to target dimensions
- * using HTML5 Canvas, strictly preserving aspect ratio with proportional contain/fit (zero-crop).
+ * using HTML5 Canvas, strictly preserving aspect ratio with proportional contain/fit (zero-stretch)
+ * and background fill, directly matching imageresizer.com.
  */
 export async function resizeImageToAdSize(
   imageSource: string | File,
@@ -31,11 +34,16 @@ export async function resizeImageToAdSize(
   options: ResizeOptions = {}
 ): Promise<ImageResizeResult> {
   const {
-    format = 'image/jpeg',
     quality = 0.92,
     fitMode = 'contain',
-    backgroundColor = '#FFFFFF'
+    backgroundFill = true,
+    backgroundColor = '#000000',
+    rotation = 0
   } = options;
+
+  const isTransparent = backgroundColor === 'transparent';
+  // Use PNG automatically if transparency is selected or explicitly requested
+  const outputFormat = options.format || (isTransparent ? 'image/png' : 'image/jpeg');
 
   return new Promise((resolve, reject) => {
     const img = new Image();
@@ -52,21 +60,24 @@ export async function resizeImageToAdSize(
           return;
         }
 
-        // Fill background if specified (and not transparent)
-        if (backgroundColor && backgroundColor !== 'transparent') {
+        // Fill background
+        if (isTransparent) {
+          ctx.clearRect(0, 0, targetWidth, targetHeight);
+        } else if (backgroundColor) {
           ctx.fillStyle = backgroundColor;
           ctx.fillRect(0, 0, targetWidth, targetHeight);
-        } else if (format === 'image/jpeg') {
-          // JPEG doesn't support transparency, fallback to white
-          ctx.fillStyle = '#FFFFFF';
-          ctx.fillRect(0, 0, targetWidth, targetHeight);
         } else {
-          ctx.clearRect(0, 0, targetWidth, targetHeight);
+          ctx.fillStyle = '#000000';
+          ctx.fillRect(0, 0, targetWidth, targetHeight);
         }
 
         // High quality bicubic image rendering
         ctx.imageSmoothingEnabled = true;
         ctx.imageSmoothingQuality = 'high';
+
+        const isRotated90or270 = (rotation % 180) !== 0;
+        const sourceEffectiveWidth = isRotated90or270 ? img.naturalHeight : img.naturalWidth;
+        const sourceEffectiveHeight = isRotated90or270 ? img.naturalWidth : img.naturalHeight;
 
         let scale = 1;
         let drawWidth = targetWidth;
@@ -74,23 +85,34 @@ export async function resizeImageToAdSize(
         let offsetX = 0;
         let offsetY = 0;
 
-        if (fitMode === 'stretch') {
-          // Stretch to fill canvas completely
-          drawWidth = targetWidth;
-          drawHeight = targetHeight;
-          scale = Math.min(targetWidth / img.naturalWidth, targetHeight / img.naturalHeight);
-        } else {
-          // Mandatory CONTAIN / FIT: zero cropping, preserve complete original image
-          scale = Math.min(targetWidth / img.naturalWidth, targetHeight / img.naturalHeight);
-          drawWidth = Math.round(img.naturalWidth * scale);
-          drawHeight = Math.round(img.naturalHeight * scale);
+        // If backgroundFill is active (default) or fitMode is contain, NEVER STRETCH:
+        if (backgroundFill || fitMode === 'contain') {
+          scale = Math.min(targetWidth / sourceEffectiveWidth, targetHeight / sourceEffectiveHeight);
+          drawWidth = Math.round(sourceEffectiveWidth * scale);
+          drawHeight = Math.round(sourceEffectiveHeight * scale);
           offsetX = Math.round((targetWidth - drawWidth) / 2);
           offsetY = Math.round((targetHeight - drawHeight) / 2);
+        } else {
+          // Only stretch if user explicitly disabled backgroundFill AND set stretch mode
+          drawWidth = targetWidth;
+          drawHeight = targetHeight;
+          scale = Math.min(targetWidth / sourceEffectiveWidth, targetHeight / sourceEffectiveHeight);
         }
 
-        ctx.drawImage(img, offsetX, offsetY, drawWidth, drawHeight);
+        ctx.save();
+        if (rotation !== 0) {
+          // Move origin to center of bounding box
+          ctx.translate(offsetX + drawWidth / 2, offsetY + drawHeight / 2);
+          ctx.rotate((rotation * Math.PI) / 180);
+          const rawW = isRotated90or270 ? drawHeight : drawWidth;
+          const rawH = isRotated90or270 ? drawWidth : drawHeight;
+          ctx.drawImage(img, -rawW / 2, -rawH / 2, rawW, rawH);
+        } else {
+          ctx.drawImage(img, offsetX, offsetY, drawWidth, drawHeight);
+        }
+        ctx.restore();
 
-        const dataUrl = canvas.toDataURL(format, quality);
+        const dataUrl = canvas.toDataURL(outputFormat, quality);
         canvas.toBlob(
           (blob) => {
             if (blob) {
@@ -113,7 +135,7 @@ export async function resizeImageToAdSize(
               reject(new Error('Failed to convert canvas to blob'));
             }
           },
-          format,
+          outputFormat,
           quality
         );
       } catch (err) {

@@ -178,7 +178,9 @@ export const CreateCampaignPage: React.FC<CreateCampaignPageProps> = ({ onSucces
   // Creative Type Configuration (Defaults to IMAGE)
   const [creativeType, setCreativeType] = useState<CreativeType>('IMAGE');
   const [fitMode, setFitMode] = useState<'contain' | 'stretch'>('contain');
-  const [backgroundColor, setBackgroundColor] = useState<string>('#FFFFFF');
+  const [backgroundColor, setBackgroundColor] = useState<string>('#000000');
+  const [backgroundFill, setBackgroundFill] = useState<boolean>(true);
+  const [rotation, setRotation] = useState<number>(0);
 
   // Polymorphic Creative Form Fields
   const [thirdPartySnippet, setThirdPartySnippet] = useState('');
@@ -234,7 +236,9 @@ export const CreateCampaignPage: React.FC<CreateCampaignPageProps> = ({ onSucces
     sourceDataUrl: string,
     sizesToResize: AdSize[],
     mode: 'contain' | 'stretch' = fitMode,
-    bgColor: string = backgroundColor
+    bgColor: string = backgroundColor,
+    bgFill: boolean = backgroundFill,
+    rot: number = rotation
   ) => {
     setIsResizing(true);
     const newMap: Record<string, string> = {};
@@ -243,7 +247,9 @@ export const CreateCampaignPage: React.FC<CreateCampaignPageProps> = ({ onSucces
         const key = `${size.width}x${size.height}`;
         const resized = await resizeImageToAdSize(sourceDataUrl, size.width, size.height, {
           fitMode: mode,
-          backgroundColor: bgColor
+          backgroundColor: bgColor,
+          backgroundFill: bgFill,
+          rotation: rot
         });
         newMap[key] = resized.dataUrl;
       }
@@ -279,7 +285,7 @@ export const CreateCampaignPage: React.FC<CreateCampaignPageProps> = ({ onSucces
             setUploadedFileName(file.name);
             setRawBannerDataUrl(dataUrl);
             setOriginalDimensions(dims);
-            performAutoResize(dataUrl, selectedSizes);
+            performAutoResize(dataUrl, selectedSizes, fitMode, backgroundColor, backgroundFill, rotation);
           }
 
           setUploadedFiles(prev => {
@@ -312,7 +318,7 @@ export const CreateCampaignPage: React.FC<CreateCampaignPageProps> = ({ onSucces
     setUploadedFileName(item.name);
     setRawBannerDataUrl(item.dataUrl);
     setOriginalDimensions(item.dimensions || null);
-    performAutoResize(item.dataUrl, selectedSizes);
+    performAutoResize(item.dataUrl, selectedSizes, fitMode, backgroundColor, backgroundFill, rotation);
   };
 
   const handleRemoveBanner = (indexToRemove: number) => {
@@ -333,6 +339,7 @@ export const CreateCampaignPage: React.FC<CreateCampaignPageProps> = ({ onSucces
     setRawBannerDataUrl(null);
     setOriginalDimensions(null);
     setResizedMap({});
+    setRotation(0);
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
@@ -457,12 +464,12 @@ export const CreateCampaignPage: React.FC<CreateCampaignPageProps> = ({ onSucces
     });
   }, []);
 
-  // When selected sizes, fitMode, or backgroundColor change, re-run auto-resize
+  // When selected sizes, fitMode, backgroundColor, backgroundFill, or rotation change, re-run auto-resize
   useEffect(() => {
     if (rawBannerDataUrl) {
-      performAutoResize(rawBannerDataUrl, selectedSizes, fitMode, backgroundColor);
+      performAutoResize(rawBannerDataUrl, selectedSizes, fitMode, backgroundColor, backgroundFill, rotation);
     }
-  }, [selectedSizes, fitMode, backgroundColor]);
+  }, [selectedSizes, fitMode, backgroundColor, backgroundFill, rotation]);
 
   const handleHtml5Upload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -1495,65 +1502,6 @@ export const CreateCampaignPage: React.FC<CreateCampaignPageProps> = ({ onSucces
             {/* Dynamic Panel: IMAGE CREATIVE */}
             {creativeType === 'IMAGE' && (
               <div className="space-y-4">
-                {/* Contain / Fit Controls & Background Styling */}
-                <div className="flex flex-col gap-3 p-3 sm:p-3.5 bg-white rounded-xl border border-slate-200 text-xs">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                    <span className="font-bold text-slate-700 flex items-center gap-1.5 shrink-0">
-                      <Maximize2 className="w-3.5 h-3.5 text-blue-600" />
-                      Image Fit:
-                    </span>
-                    <div className="grid grid-cols-2 sm:flex sm:items-center gap-1 bg-slate-100 p-1 rounded-lg w-full sm:w-auto">
-                      <button
-                        type="button"
-                        onClick={() => setFitMode('contain')}
-                        className={`px-2.5 py-1.5 rounded-md text-[11px] font-semibold text-center transition ${
-                          fitMode === 'contain'
-                            ? 'bg-blue-600 text-white shadow-xs'
-                            : 'text-slate-600 hover:text-slate-900'
-                        }`}
-                      >
-                        Contain / Fit (Default)
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setFitMode('stretch')}
-                        className={`px-2.5 py-1.5 rounded-md text-[11px] font-semibold text-center transition ${
-                          fitMode === 'stretch'
-                            ? 'bg-blue-600 text-white shadow-xs'
-                            : 'text-slate-600 hover:text-slate-900'
-                        }`}
-                      >
-                        Stretch to Canvas
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-2.5 border-t border-slate-100">
-                    <span className="font-bold text-slate-700 shrink-0">Padding Fill:</span>
-                    <div className="grid grid-cols-3 sm:flex sm:items-center gap-1.5 w-full sm:w-auto">
-                      {[
-                        { label: 'White', val: '#FFFFFF', dot: 'bg-white border-slate-300' },
-                        { label: 'Transparent', val: 'transparent', dot: 'bg-slate-200 border-dashed border-slate-400' },
-                        { label: 'Black', val: '#000000', dot: 'bg-black border-black' }
-                      ].map(bg => (
-                        <button
-                          key={bg.val}
-                          type="button"
-                          onClick={() => setBackgroundColor(bg.val)}
-                          className={`justify-center px-2 py-1.5 rounded-lg border text-[11px] font-medium flex items-center gap-1.5 transition ${
-                            backgroundColor === bg.val
-                              ? 'border-blue-600 bg-blue-50 text-blue-700 font-bold shadow-2xs'
-                              : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
-                          }`}
-                        >
-                          <span className={`w-2.5 h-2.5 rounded-full border shrink-0 ${bg.dot}`}></span>
-                          <span className="truncate">{bg.label}</span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-
                 {/* Banner Upload Dropzone */}
                 <input
                   type="file"
@@ -1578,7 +1526,7 @@ export const CreateCampaignPage: React.FC<CreateCampaignPageProps> = ({ onSucces
                       Click to browse or drag & drop banner image
                     </div>
                     <div className="text-[11px] sm:text-xs text-slate-500 mt-1 max-w-sm">
-                      Upload 1 master banner (auto-scales proportionally into all selected ad sizes without cropping)
+                      Upload 1 master banner (auto-scales proportionally into all selected ad sizes without cropping or stretching)
                     </div>
                     <div className="text-[10px] sm:text-[11px] text-slate-400 mt-2 font-mono">
                       PNG, JPG, WEBP, GIF (Direct local upload only)
@@ -1669,14 +1617,24 @@ export const CreateCampaignPage: React.FC<CreateCampaignPageProps> = ({ onSucces
                   </div>
                 )}
 
-                {/* Banner Auto-Resize Preview Suite */}
+                {/* Banner Auto-Resize Preview Suite (imageresizer style) */}
                 <ImagePreview
                   url={rawBannerDataUrl || undefined}
+                  fileName={uploadedFileName || 'banner.jpg'}
                   originalDimensions={originalDimensions}
                   resizedMap={resizedMap}
                   selectedSizes={selectedSizes}
+                  onSelectSizes={setSelectedSizes}
                   targetUrl={targetUrl}
                   fitMode={fitMode}
+                  onFitModeChange={setFitMode}
+                  backgroundFill={backgroundFill}
+                  onBackgroundFillChange={setBackgroundFill}
+                  backgroundColor={backgroundColor}
+                  onBackgroundColorChange={setBackgroundColor}
+                  rotation={rotation}
+                  onRotationChange={setRotation}
+                  onClearImage={handleClearAllImages}
                 />
               </div>
             )}
